@@ -20,17 +20,17 @@ def generate_neural_gaussians(viewpoint_camera, pc : GaussianModel, visible_mask
     if visible_mask is None:
         visible_mask = torch.ones(pc.get_anchor.shape[0], dtype=torch.bool, device = pc.get_anchor.device)
     
-    feat = pc._anchor_feat[visible_mask]
-    anchor = pc.get_anchor[visible_mask]
-    grid_offsets = pc._offset[visible_mask]
-    grid_scaling = pc.get_scaling[visible_mask]
+    feat = pc._anchor_feat[visible_mask]#[N_an,32]
+    anchor = pc.get_anchor[visible_mask]#[N_an,3]
+    grid_offsets = pc._offset[visible_mask]#[N_an,10,3]
+    grid_scaling = pc.get_scaling[visible_mask]#[N_an,6]
 
     ## get view properties for anchor
     ob_view = anchor - viewpoint_camera.camera_center
     # dist
-    ob_dist = ob_view.norm(dim=1, keepdim=True)
+    ob_dist = ob_view.norm(dim=1, keepdim=True)#[N_an,1]
     # view
-    ob_view = ob_view / ob_dist
+    ob_view = ob_view / ob_dist#[N_an,3]
 
     ## view-adaptive feature
     if pc.use_feat_bank:
@@ -85,14 +85,14 @@ def generate_neural_gaussians(viewpoint_camera, pc : GaussianModel, visible_mask
         scale_rot = pc.get_cov_mlp(cat_local_view)
     else:
         scale_rot = pc.get_cov_mlp(cat_local_view_wodist)
-    scale_rot = scale_rot.reshape([anchor.shape[0]*pc.n_offsets, 7]) # [mask]
+    scale_rot = scale_rot.reshape([anchor.shape[0]*pc.n_offsets, 7]) # [mask] #[N_an,70]->[N_gau,7]
     
     # offsets
     offsets = grid_offsets.view([-1, 3]) # [mask]
     
     # combine for parallel masking
     concatenated = torch.cat([grid_scaling, anchor], dim=-1)
-    concatenated_repeated = repeat(concatenated, 'n (c) -> (n k) (c)', k=pc.n_offsets)
+    concatenated_repeated = repeat(concatenated, 'n (c) -> (n k) (c)', k=pc.n_offsets)#[N_an,9]->[N_gau,9]: 1for10
     concatenated_all = torch.cat([concatenated_repeated, color, scale_rot, offsets], dim=-1)
     masked = concatenated_all[mask]
     scaling_repeat, repeat_anchor, color, scale_rot, offsets = masked.split([6, 3, 3, 7, 3], dim=-1)

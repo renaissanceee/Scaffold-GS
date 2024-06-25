@@ -605,13 +605,13 @@ class GaussianModel:
             
             # assert self.update_init_factor // (self.update_hierachy_factor**i) > 0
             # size_factor = min(self.update_init_factor // (self.update_hierachy_factor**i), 1)
-            size_factor = self.update_init_factor // (self.update_hierachy_factor**i)
+            size_factor = self.update_init_factor // (self.update_hierachy_factor**i)# 4//(4**i)
             cur_size = self.voxel_size*size_factor
+            # print(cur_size)#0.01522/0.00380/0
             
-            grid_coords = torch.round(self.get_anchor / cur_size).int()
-
-            selected_xyz = all_xyz.view([-1, 3])[candidate_mask]
-            selected_grid_coords = torch.round(selected_xyz / cur_size).int()
+            grid_coords = torch.round(self.get_anchor / cur_size).int()#[N_an,3]
+            selected_xyz = all_xyz.view([-1, 3])[candidate_mask]# mask(grad)
+            selected_grid_coords = torch.round(selected_xyz / cur_size).int()#[N_an_select_1,3]
 
             selected_grid_coords_unique, inverse_indices = torch.unique(selected_grid_coords, return_inverse=True, dim=0)
 
@@ -626,13 +626,14 @@ class GaussianModel:
                     cur_remove_duplicates = (selected_grid_coords_unique.unsqueeze(1) == grid_coords[i*chunk_size:(i+1)*chunk_size, :]).all(-1).any(-1).view(-1)
                     remove_duplicates_list.append(cur_remove_duplicates)
                 
-                remove_duplicates = reduce(torch.logical_or, remove_duplicates_list)
+                remove_duplicates = reduce(torch.logical_or, remove_duplicates_list)# N_an_select_2
             else:
                 remove_duplicates = (selected_grid_coords_unique.unsqueeze(1) == grid_coords).all(-1).any(-1).view(-1)
 
             remove_duplicates = ~remove_duplicates
-            candidate_anchor = selected_grid_coords_unique[remove_duplicates]*cur_size
-
+            candidate_anchor = selected_grid_coords_unique[remove_duplicates]*cur_size# grid->xyz [N_an_select_3,3]
+            # import pdb;pdb.set_trace()
+            
             
             if candidate_anchor.shape[0] > 0:
                 new_scaling = torch.ones_like(candidate_anchor).repeat([1,2]).float().cuda()*cur_size # *0.05

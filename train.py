@@ -11,14 +11,11 @@
 
 import os
 import numpy as np
-
 import subprocess
 cmd = 'nvidia-smi -q -d Memory |grep -A4 GPU|grep Used'
 result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE).stdout.decode().split('\n')
 os.environ['CUDA_VISIBLE_DEVICES']=str(np.argmin([int(x.split()[2]) for x in result[:-1]]))
-
 os.system('echo $CUDA_VISIBLE_DEVICES')
-
 
 import torch
 import torchvision
@@ -55,28 +52,28 @@ except ImportError:
     TENSORBOARD_FOUND = False
     print("not found tf board")
 
-def saveRuntimeCode(dst: str) -> None:
-    additionalIgnorePatterns = ['.git', '.gitignore']
-    ignorePatterns = set()
-    ROOT = '.'
-    with open(os.path.join(ROOT, '.gitignore')) as gitIgnoreFile:
-        for line in gitIgnoreFile:
-            if not line.startswith('#'):
-                if line.endswith('\n'):
-                    line = line[:-1]
-                if line.endswith('/'):
-                    line = line[:-1]
-                ignorePatterns.add(line)
-    ignorePatterns = list(ignorePatterns)
-    for additionalPattern in additionalIgnorePatterns:
-        ignorePatterns.append(additionalPattern)
-
-    log_dir = pathlib.Path(__file__).parent.resolve()
-
-
-    shutil.copytree(log_dir, dst, ignore=shutil.ignore_patterns(*ignorePatterns))
-    
-    print('Backup Finished!')
+# def saveRuntimeCode(dst: str) -> None:
+#     additionalIgnorePatterns = ['.git', '.gitignore']
+#     ignorePatterns = set()
+#     ROOT = '.'
+#     with open(os.path.join(ROOT, '.gitignore')) as gitIgnoreFile:
+#         for line in gitIgnoreFile:
+#             if not line.startswith('#'):
+#                 if line.endswith('\n'):
+#                     line = line[:-1]
+#                 if line.endswith('/'):
+#                     line = line[:-1]
+#                 ignorePatterns.add(line)
+#     ignorePatterns = list(ignorePatterns)
+#     for additionalPattern in additionalIgnorePatterns:
+#         ignorePatterns.append(additionalPattern)
+#
+#     log_dir = pathlib.Path(__file__).parent.resolve()
+#
+#
+#     shutil.copytree(log_dir, dst, ignore=shutil.ignore_patterns(*ignorePatterns))
+#
+#     print('Backup Finished!')
 
 
 def training(dataset, opt, pipe, dataset_name, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, wandb=None, logger=None, ply_path=None):
@@ -466,8 +463,8 @@ if __name__ == "__main__":
     parser.add_argument('--use_wandb', action='store_true', default=False)
     # parser.add_argument("--test_iterations", nargs="+", type=int, default=[3_000, 7_000, 30_000])
     # parser.add_argument("--save_iterations", nargs="+", type=int, default=[3_000, 7_000, 30_000])
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[30_000])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[30_000])
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[7000, 30_000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
@@ -491,12 +488,10 @@ if __name__ == "__main__":
         os.system("echo $CUDA_VISIBLE_DEVICES")
         logger.info(f'using GPU {args.gpu}')
 
-    
-
-    try:
-        saveRuntimeCode(os.path.join(args.model_path, 'backup'))
-    except:
-        logger.info(f'save code failed~')
+    # try:
+    #     saveRuntimeCode(os.path.join(args.model_path, 'backup'))
+    # except:
+    #     logger.info(f'save code failed~')
         
     dataset = args.source_path.split('/')[-1]
     exp_name = args.model_path.split('/')[-2]
@@ -524,7 +519,7 @@ if __name__ == "__main__":
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
     
     # training
-    training(lp.extract(args), op.extract(args), pp.extract(args), dataset,  args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from, wandb, logger)
+    training(lp.extract(args), op.extract(args), pp.extract(args), dataset,  args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from, wandb, logger=logger)
     if args.warmup:
         logger.info("\n Warmup finished! Reboot from last checkpoints")
         new_ply_path = os.path.join(args.model_path, f'point_cloud/iteration_{args.iterations}', 'point_cloud.ply')
@@ -533,12 +528,12 @@ if __name__ == "__main__":
     # All done
     logger.info("\nTraining complete.")
 
-    # rendering
-    logger.info(f'\nStarting Rendering~')
-    visible_count = render_sets(lp.extract(args), -1, pp.extract(args), wandb=wandb, logger=logger)
-    logger.info("\nRendering complete.")
-
-    # calc metrics
-    logger.info("\n Starting evaluation...")
-    evaluate(args.model_path, visible_count=visible_count, wandb=wandb, logger=logger)
-    logger.info("\nEvaluating complete.")
+    # # rendering
+    # logger.info(f'\nStarting Rendering~')
+    # visible_count = render_sets(lp.extract(args), -1, pp.extract(args), wandb=wandb, logger=logger)
+    # logger.info("\nRendering complete.")
+    #
+    # # calc metrics
+    # logger.info("\n Starting evaluation...")
+    # evaluate(args.model_path, visible_count=visible_count, wandb=wandb, logger=logger)
+    # logger.info("\nEvaluating complete.")
