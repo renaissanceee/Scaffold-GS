@@ -22,7 +22,7 @@ class Scene:
 
     gaussians : GaussianModel
 
-    def __init__(self, args : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0], ply_path=None,load_gaussian=""):
+    def __init__(self, args : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0], ply_path=None,load_gaussian="", source_z=False):
         """b
         :param path: Path to colmap scene main folder.
         """
@@ -40,9 +40,14 @@ class Scene:
 
         self.train_cameras = {}
         self.test_cameras = {}
+        self.near_cameras = {}
 
         if os.path.exists(os.path.join(args.source_path, "sparse")):
             scene_info = sceneLoadTypeCallbacks["Colmap"](args.source_path, args.images, args.eval, args.lod)
+        elif source_z:
+            if os.path.exists(os.path.join(args.source_path, "near_z_2", "updated_transforms_train.json")):
+                print("Found near+far dataset, assuming z_Blender data set!")
+                scene_info = sceneLoadTypeCallbacks["z-Blender"](args.source_path, args.white_background, args.eval, ply_path=ply_path)
         elif os.path.exists(os.path.join(args.source_path, "transforms_train.json")):
             print("Found transforms_train.json file, assuming Blender data set!")
             scene_info = sceneLoadTypeCallbacks["Blender"](args.source_path, args.white_background, args.eval, ply_path=ply_path)
@@ -80,6 +85,15 @@ class Scene:
         for resolution_scale in resolution_scales:
             print("Loading Training Cameras")
             self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, args)
+            #----------------------
+            if source_z:
+                tmp = args.resolution
+                print("Loading Near Cameras")
+                args.resolution = 8
+                self.near_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.near_cameras, resolution_scale, args)  # near
+                self.train_cameras[resolution_scale] += self.near_cameras[resolution_scale]
+                args.resolution = tmp
+            # ----------------------
             print("Loading Test Cameras")
             self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, args)
 
