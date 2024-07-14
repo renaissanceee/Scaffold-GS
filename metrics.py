@@ -53,9 +53,6 @@ def evaluate(model_paths, scale):
             test_dir = Path(scene_dir) / "test"
 
             for method in os.listdir(test_dir):
-                if method!="ours_1000":
-                    continue
-
                 print("Method:", method)
 
                 full_dict[scene_dir][method] = {}

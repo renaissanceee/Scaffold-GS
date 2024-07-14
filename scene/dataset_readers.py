@@ -350,7 +350,7 @@ def readNerfSyntheticInfo_z(path, white_background, eval, extension=".png", ply_
 
     # to render near views
     # near_cam_infos = readCamerasFromTransforms(os.path.join(path,"near_z_2"), "updated_transforms_test.json", white_background, extension)
-    # test_cam_infos = near_cam_infos
+    # test_cam_infos = near_cam_infos 
 
     if not eval:
         train_cam_infos.extend(test_cam_infos)
@@ -375,9 +375,10 @@ def readNerfSyntheticInfo_z(path, white_background, eval, extension=".png", ply_
     except:
         pcd = None
 
-    scene_info = SceneInfo(point_cloud=pcd,
+    scene_info = SceneInfo_z(point_cloud=pcd,
                            train_cameras=train_cam_infos,
                            test_cameras=test_cam_infos,
+                           near_cameras=near_cam_infos,
                            nerf_normalization=nerf_normalization,
                            ply_path=ply_path)
     return scene_info

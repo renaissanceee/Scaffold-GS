@@ -20,7 +20,6 @@ os.system('echo $CUDA_VISIBLE_DEVICES')
 import torch
 import torchvision
 import json
-import wandb
 import time
 from os import makedirs
 import shutil, pathlib
@@ -52,33 +51,10 @@ except ImportError:
     TENSORBOARD_FOUND = False
     print("not found tf board")
 
-# def saveRuntimeCode(dst: str) -> None:
-#     additionalIgnorePatterns = ['.git', '.gitignore']
-#     ignorePatterns = set()
-#     ROOT = '.'
-#     with open(os.path.join(ROOT, '.gitignore')) as gitIgnoreFile:
-#         for line in gitIgnoreFile:
-#             if not line.startswith('#'):
-#                 if line.endswith('\n'):
-#                     line = line[:-1]
-#                 if line.endswith('/'):
-#                     line = line[:-1]
-#                 ignorePatterns.add(line)
-#     ignorePatterns = list(ignorePatterns)
-#     for additionalPattern in additionalIgnorePatterns:
-#         ignorePatterns.append(additionalPattern)
-#
-#     log_dir = pathlib.Path(__file__).parent.resolve()
-#
-#
-#     shutil.copytree(log_dir, dst, ignore=shutil.ignore_patterns(*ignorePatterns))
-#
-#     print('Backup Finished!')
-
-
 def training(dataset, opt, pipe, dataset_name, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, wandb=None, logger=None, ply_path=None):
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
+    dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist = True, True, True
     gaussians = GaussianModel(dataset.feat_dim, dataset.n_offsets, dataset.voxel_size, dataset.update_depth, dataset.update_init_factor, dataset.update_hierachy_factor, dataset.use_feat_bank, 
                               dataset.appearance_dim, dataset.ratio, dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist)
     scene = Scene(dataset, gaussians, ply_path=ply_path, shuffle=False)
@@ -142,7 +118,6 @@ def training(dataset, opt, pipe, dataset_name, testing_iterations, saving_iterat
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * ssim_loss + 0.01*scaling_reg
 
         loss.backward()
-        
         iter_end.record()
 
         with torch.no_grad():
@@ -165,7 +140,6 @@ def training(dataset, opt, pipe, dataset_name, testing_iterations, saving_iterat
             if iteration < opt.update_until and iteration > opt.start_stat:
                 # add statis
                 gaussians.training_statis(viewspace_point_tensor, opacity, visibility_filter, offset_selection_mask, voxel_visible_mask)
-                
                 # densification
                 if iteration > opt.update_from and iteration % opt.update_interval == 0:
                     gaussians.adjust_anchor(check_interval=opt.update_interval, success_threshold=opt.success_threshold, grad_threshold=opt.densify_grad_threshold, min_opacity=opt.min_opacity)
@@ -210,10 +184,6 @@ def training_report(tb_writer, dataset_name, iteration, Ll1, loss, l1_loss, elap
         tb_writer.add_scalar(f'{dataset_name}/train_loss_patches/l1_loss', Ll1.item(), iteration)
         tb_writer.add_scalar(f'{dataset_name}/train_loss_patches/total_loss', loss.item(), iteration)
         tb_writer.add_scalar(f'{dataset_name}/iter_time', elapsed, iteration)
-
-
-    if wandb is not None:
-        wandb.log({"train_l1_loss":Ll1, 'train_total_loss':loss, })
     
     # Report test and samples of training set
     if iteration in testing_iterations:
@@ -226,11 +196,6 @@ def training_report(tb_writer, dataset_name, iteration, Ll1, loss, l1_loss, elap
             if config['cameras'] and len(config['cameras']) > 0:
                 l1_test = 0.0
                 psnr_test = 0.0
-                
-                if wandb is not None:
-                    gt_image_list = []
-                    render_image_list = []
-                    errormap_list = []
 
                 for idx, viewpoint in enumerate(config['cameras']):
                     voxel_visible_mask = prefilter_voxel(viewpoint, scene.gaussians, *renderArgs)
@@ -239,15 +204,9 @@ def training_report(tb_writer, dataset_name, iteration, Ll1, loss, l1_loss, elap
                     if tb_writer and (idx < 30):
                         tb_writer.add_images(f'{dataset_name}/'+config['name'] + "_view_{}/render".format(viewpoint.image_name), image[None], global_step=iteration)
                         tb_writer.add_images(f'{dataset_name}/'+config['name'] + "_view_{}/errormap".format(viewpoint.image_name), (gt_image[None]-image[None]).abs(), global_step=iteration)
-
-                        if wandb:
-                            render_image_list.append(image[None])
-                            errormap_list.append((gt_image[None]-image[None]).abs())
                             
                         if iteration == testing_iterations[0]:
                             tb_writer.add_images(f'{dataset_name}/'+config['name'] + "_view_{}/ground_truth".format(viewpoint.image_name), gt_image[None], global_step=iteration)
-                            if wandb:
-                                gt_image_list.append(gt_image[None])
 
                     l1_test += l1_loss(image, gt_image).mean().double()
                     psnr_test += psnr(image, gt_image).mean().double()
@@ -262,8 +221,6 @@ def training_report(tb_writer, dataset_name, iteration, Ll1, loss, l1_loss, elap
                 if tb_writer:
                     tb_writer.add_scalar(f'{dataset_name}/'+config['name'] + '/loss_viewpoint - l1_loss', l1_test, iteration)
                     tb_writer.add_scalar(f'{dataset_name}/'+config['name'] + '/loss_viewpoint - psnr', psnr_test, iteration)
-                if wandb is not None:
-                    wandb.log({f"{config['name']}_loss_viewpoint_l1_loss":l1_test, f"{config['name']}_PSNR":psnr_test})
 
         if tb_writer:
             # tb_writer.add_histogram(f'{dataset_name}/'+"scene/opacity_histogram", scene.gaussians.get_opacity, iteration)
@@ -320,6 +277,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
 
 def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train=True, skip_test=False, wandb=None, tb_writer=None, dataset_name=None, logger=None):
     with torch.no_grad():
+        dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist = True, True, True
         gaussians = GaussianModel(dataset.feat_dim, dataset.n_offsets, dataset.voxel_size, dataset.update_depth, dataset.update_init_factor, dataset.update_hierachy_factor, dataset.use_feat_bank, 
                               dataset.appearance_dim, dataset.ratio, dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist)
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
@@ -334,18 +292,13 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
             t_train_list, visible_count  = render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background)
             train_fps = 1.0 / torch.tensor(t_train_list[5:]).mean()
             logger.info(f'Train FPS: \033[1;35m{train_fps.item():.5f}\033[0m')
-            if wandb is not None:
-                wandb.log({"train_fps":train_fps.item(), })
-
         if not skip_test:
             t_test_list, visible_count = render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background)
             test_fps = 1.0 / torch.tensor(t_test_list[5:]).mean()
             logger.info(f'Test FPS: \033[1;35m{test_fps.item():.5f}\033[0m')
             if tb_writer:
                 tb_writer.add_scalar(f'{dataset_name}/test_FPS', test_fps.item(), 0)
-            if wandb is not None:
-                wandb.log({"test_fps":test_fps, })
-    
+
     return visible_count
 
 
@@ -398,11 +351,6 @@ def evaluate(model_paths, visible_count=None, wandb=None, tb_writer=None, datase
             ssims.append(ssim(renders[idx], gts[idx]))
             psnrs.append(psnr(renders[idx], gts[idx]))
             lpipss.append(lpips_fn(renders[idx], gts[idx]).detach())
-        
-        if wandb is not None:
-            wandb.log({"test_SSIMS":torch.stack(ssims).mean().item(), })
-            wandb.log({"test_PSNR_final":torch.stack(psnrs).mean().item(), })
-            wandb.log({"test_LPIPS":torch.stack(lpipss).mean().item(), })
 
         logger.info(f"model_paths: \033[1;35m{model_paths}\033[0m")
         logger.info("  SSIM : \033[1;35m{:>12.7f}\033[0m".format(torch.tensor(ssims).mean(), ".5"))
@@ -495,19 +443,8 @@ if __name__ == "__main__":
         
     dataset = args.source_path.split('/')[-1]
     exp_name = args.model_path.split('/')[-2]
-    
-    if args.use_wandb:
-        wandb.login()
-        run = wandb.init(
-            # Set the project where this run will be logged
-            project=f"Scaffold-GS-{dataset}",
-            name=exp_name,
-            # Track hyperparameters and run metadata
-            settings=wandb.Settings(start_method="fork"),
-            config=vars(args)
-        )
-    else:
-        wandb = None
+
+    wandb = None
     
     logger.info("Optimizing " + args.model_path)
 
@@ -528,12 +465,12 @@ if __name__ == "__main__":
     # All done
     logger.info("\nTraining complete.")
 
-    # # rendering
-    # logger.info(f'\nStarting Rendering~')
-    # visible_count = render_sets(lp.extract(args), -1, pp.extract(args), wandb=wandb, logger=logger)
-    # logger.info("\nRendering complete.")
-    #
-    # # calc metrics
-    # logger.info("\n Starting evaluation...")
-    # evaluate(args.model_path, visible_count=visible_count, wandb=wandb, logger=logger)
-    # logger.info("\nEvaluating complete.")
+    # rendering
+    logger.info(f'\nStarting Rendering~')
+    visible_count = render_sets(lp.extract(args), -1, pp.extract(args), wandb=wandb, logger=logger)
+    logger.info("\nRendering complete.")
+
+    # calc metrics
+    logger.info("\n Starting evaluation...")
+    evaluate(args.model_path, visible_count=visible_count, wandb=wandb, logger=logger)
+    logger.info("\nEvaluating complete.")

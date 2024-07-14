@@ -67,6 +67,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
      
 def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool, scale: int):
     with torch.no_grad():
+        # dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist = True, True, True
         gaussians = GaussianModel(dataset.feat_dim, dataset.n_offsets, dataset.voxel_size, dataset.update_depth, dataset.update_init_factor, dataset.update_hierachy_factor, dataset.use_feat_bank, 
                               dataset.appearance_dim, dataset.ratio, dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist)
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
