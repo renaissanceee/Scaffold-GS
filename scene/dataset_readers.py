@@ -306,8 +306,8 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png", ply_pa
     test_cam_infos = readCamerasFromTransforms(path, "transforms_test.json", white_background, extension)
 
     # to render near views
-    # near_cam_infos = readCamerasFromTransforms(os.path.join(path,"near_z_2"), "updated_transforms_test.json", white_background, extension)
-    # test_cam_infos = near_cam_infos
+    near_cam_infos = readCamerasFromTransforms(os.path.join(path,"near_z_2"), "updated_transforms_test.json", white_background, extension)
+    test_cam_infos = near_cam_infos
 
     if not eval:
         train_cam_infos.extend(test_cam_infos)
@@ -345,12 +345,13 @@ def readNerfSyntheticInfo_z(path, white_background, eval, extension=".png", ply_
     train_cam_infos = readCamerasFromTransforms(path, "transforms_train.json", white_background, extension)
     near_cam_infos = readCamerasFromTransforms(os.path.join(path, "near_z_2"), "updated_transforms_train.json",
                                                white_background, extension)
+    train_cam_infos = train_cam_infos + near_cam_infos
     print("Reading Test Transforms")
     test_cam_infos = readCamerasFromTransforms(path, "transforms_test.json", white_background, extension)
 
     # to render near views
     # near_cam_infos = readCamerasFromTransforms(os.path.join(path,"near_z_2"), "updated_transforms_test.json", white_background, extension)
-    # test_cam_infos = near_cam_infos 
+    # test_cam_infos = near_cam_infos
 
     if not eval:
         train_cam_infos.extend(test_cam_infos)

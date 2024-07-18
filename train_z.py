@@ -79,7 +79,7 @@ except ImportError:
 def training(dataset, opt, pipe, dataset_name, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, wandb=None, logger=None, ply_path=None, source_z=False):
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
-    # dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist = True, True, True
+    dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist = True, True, True
     gaussians = GaussianModel(dataset.feat_dim, dataset.n_offsets, dataset.voxel_size, dataset.update_depth, dataset.update_init_factor, dataset.update_hierachy_factor, dataset.use_feat_bank, 
                               dataset.appearance_dim, dataset.ratio, dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist)
     scene = Scene(dataset, gaussians, ply_path=ply_path, shuffle=False, source_z=source_z)
@@ -321,7 +321,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
 
 def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train=True, skip_test=False, wandb=None, tb_writer=None, dataset_name=None, logger=None):
     with torch.no_grad():
-        # dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist = True, True, True
+        dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist = True, True, True
         gaussians = GaussianModel(dataset.feat_dim, dataset.n_offsets, dataset.voxel_size, dataset.update_depth, dataset.update_init_factor, dataset.update_hierachy_factor, dataset.use_feat_bank, 
                               dataset.appearance_dim, dataset.ratio, dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist)
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
