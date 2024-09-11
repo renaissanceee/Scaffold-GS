@@ -125,7 +125,7 @@ class GaussianModel:
         #     nn.Sigmoid()
         # ).cuda()
         # ----------------------------------------------
-        self.opacity_dist_dim = 84 if self.add_opacity_dist else 0 # 1:dist, 21:dist_emb, 63: cam_emb, 84:cam_emb+dist_emb
+        self.opacity_dist_dim = 63 if self.add_opacity_dist else 0 # 1:dist, 21:dist_emb, 63: cam_emb, 84:cam_emb+dist_emb
         self.mlp_opacity = nn.Sequential(
             nn.Linear(feat_dim+63+self.opacity_dist_dim, feat_dim),
             nn.ReLU(True),
@@ -133,13 +133,13 @@ class GaussianModel:
             nn.Tanh()
         ).cuda()
         self.add_cov_dist = add_cov_dist
-        self.cov_dist_dim = 84 if self.add_cov_dist else 0
+        self.cov_dist_dim = 63 if self.add_cov_dist else 0
         self.mlp_cov = nn.Sequential(
             nn.Linear(feat_dim+63+self.cov_dist_dim, feat_dim),
             nn.ReLU(True),
             nn.Linear(feat_dim, 7*self.n_offsets),
         ).cuda()
-        self.color_dist_dim = 84 if self.add_color_dist else 0
+        self.color_dist_dim = 63 if self.add_color_dist else 0
         self.mlp_color = nn.Sequential(
             nn.Linear(feat_dim+63+self.color_dist_dim+self.appearance_dim, feat_dim),
             nn.ReLU(True),

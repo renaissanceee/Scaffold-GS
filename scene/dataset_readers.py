@@ -168,20 +168,32 @@ def readColmapSceneInfo(path, images, eval, lod, llffhold=8):
     cam_infos_unsorted = readColmapCameras(cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, images_folder=os.path.join(path, reading_dir))
     cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
 
-    if eval:
-        if lod>0:
-            print(f'using lod, using eval')
-            if lod < 50:
-                train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx > lod]
-                test_cam_infos = [c for idx, c in enumerate(cam_infos) if idx <= lod]
-                print(f'test_cam_infos: {len(test_cam_infos)}')
-            else:
-                train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx <= lod]
-                test_cam_infos = [c for idx, c in enumerate(cam_infos) if idx > lod]
+    "mip-nerf 360"
+    # if eval:
+    #     if lod>0:
+    #         print(f'using lod, using eval')
+    #         if lod < 50:
+    #             train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx > lod]
+    #             test_cam_infos = [c for idx, c in enumerate(cam_infos) if idx <= lod]
+    #             print(f'test_cam_infos: {len(test_cam_infos)}')
+    #         else:
+    #             train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx <= lod]
+    #             test_cam_infos = [c for idx, c in enumerate(cam_infos) if idx > lod]
+    #
+    #     else:
+    #         train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
+    #         test_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold == 0]
 
-        else:
-            train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
-            test_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold == 0]
+    "ZoomGS"
+    if eval:
+        eval_index = [2, 5, 8, 11, 14, 17, 20, 23, 26, 29]
+        test_cam_infos = []
+        train_cam_infos = []
+        for idx, c in enumerate(cam_infos):
+            if (idx) in eval_index:
+                test_cam_infos.append(c)
+            else:
+                train_cam_infos.append(c)
     
     else:
         train_cam_infos = cam_infos
@@ -307,9 +319,9 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png", ply_pa
     train_cam_infos = train_cam_infos+near_cam_infos
     print("Reading Test Transforms")
     # far
-    test_cam_infos = readCamerasFromTransforms(path, "transforms_test.json", white_background, extension)
+    # test_cam_infos = readCamerasFromTransforms(path, "transforms_test.json", white_background, extension)
     # near
-    # test_cam_infos = readCamerasFromTransforms(os.path.join(path,"near_z_2"), "updated_transforms_test.json", white_background, extension)
+    test_cam_infos = readCamerasFromTransforms(os.path.join(path,"near_z_1"), "updated_transforms_test.json", white_background, extension)
 
     if not eval:
         train_cam_infos.extend(test_cam_infos)

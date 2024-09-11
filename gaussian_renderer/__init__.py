@@ -68,8 +68,8 @@ def generate_neural_gaussians(viewpoint_camera, pc : GaussianModel, visible_mask
     # cat dist
     # cat_local_view = torch.cat([feat, ob_view, ob_dist], dim=1) # [N, c+3+1] eg.[94556, 36] -->96
     # cat cam_center
-    # cat_local_view = torch.cat([feat, ob_view, cam_center], dim=1)
-    cat_local_view = torch.cat([feat, ob_view, cam_center, ob_dist], dim=1)# all:32+63+63+21
+    cat_local_view = torch.cat([feat, ob_view, cam_center], dim=1)
+    # cat_local_view = torch.cat([feat, ob_view, cam_center, ob_dist], dim=1)# all:32+63+63+21
     cat_local_view_wodist = torch.cat([feat, ob_view], dim=1) # [N, c+3]   -->95
     if pc.appearance_dim > 0:
         camera_indicies = torch.ones_like(cat_local_view[:,0], dtype=torch.long, device=ob_dist.device) * viewpoint_camera.uid

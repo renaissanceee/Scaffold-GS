@@ -41,7 +41,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
 
     name_list = []
     per_view_dict = {}
-    # debug = 0
+
     t_list = []
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
 

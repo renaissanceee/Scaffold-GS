@@ -60,10 +60,16 @@ def training(dataset, opt, pipe, dataset_name, testing_iterations, saving_iterat
     iter_end = torch.cuda.Event(enable_timing = True)
 
     viewpoint_stack = None
+    viewpoint_stack = scene.getTrainCameras().copy()
+    # viewpoint_stack_far = viewpoint_stack[:len(viewpoint_stack) // 2]
+    # viewpoint_stack_near = viewpoint_stack[len(viewpoint_stack) // 2:]
+
+    viewpoint_stack_far = viewpoint_stack[:10]
+    viewpoint_stack_near = viewpoint_stack[10:]
+    print("num of far:near = 10:", len(viewpoint_stack_near))
     ema_loss_for_log = 0.0
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
-    viewpoint_stack_far = None
     for iteration in range(first_iter, opt.iterations + 1):
         iter_start.record()
         gaussians.update_learning_rate(iteration)
@@ -71,12 +77,13 @@ def training(dataset, opt, pipe, dataset_name, testing_iterations, saving_iterat
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
         # Pick a random Camera
-        if not viewpoint_stack_far:
-            viewpoint_stack = scene.getTrainCameras().copy()
-            viewpoint_stack_far = viewpoint_stack[:100]
-            viewpoint_stack_near = viewpoint_stack[100:]
-        viewpoint_cam_far = viewpoint_stack_far.pop(randint(0, len(viewpoint_stack_far)-1))
-        viewpoint_cam_near = viewpoint_stack_near.pop(randint(0, len(viewpoint_stack_near) - 1))
+        viewpoint_cam_far = viewpoint_stack_far[randint(0, len(viewpoint_stack_far)-1)]
+        viewpoint_cam_near = viewpoint_stack_near[randint(0, len(viewpoint_stack_near) - 1)]
+        
+        # must be the same line
+        # indexx = randint(0, len(viewpoint_stack_far)-1)
+        # viewpoint_cam_far = viewpoint_stack_far.pop(indexx)
+        # viewpoint_cam_near = viewpoint_stack_near.pop(indexx)
 
         # Render
         if (iteration - 1) == debug_from:
