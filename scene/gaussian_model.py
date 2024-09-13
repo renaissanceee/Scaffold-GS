@@ -103,54 +103,46 @@ class GaussianModel:
                 nn.Softmax(dim=1)
             ).cuda()
 
-        # self.opacity_dist_dim = 1 if self.add_opacity_dist else 0
-        # self.mlp_opacity = nn.Sequential(
-        #     nn.Linear(feat_dim+3+self.opacity_dist_dim, feat_dim),
-        #     nn.ReLU(True),
-        #     nn.Linear(feat_dim, n_offsets),
-        #     nn.Tanh()
-        # ).cuda()
-        # self.add_cov_dist = add_cov_dist
-        # self.cov_dist_dim = 1 if self.add_cov_dist else 0
-        # self.mlp_cov = nn.Sequential(
-        #     nn.Linear(feat_dim+3+self.cov_dist_dim, feat_dim),
-        #     nn.ReLU(True),
-        #     nn.Linear(feat_dim, 7*self.n_offsets),
-        # ).cuda()
-        # self.color_dist_dim = 1 if self.add_color_dist else 0
-        # self.mlp_color = nn.Sequential(
-        #     nn.Linear(feat_dim+3+self.color_dist_dim+self.appearance_dim, feat_dim),
-        #     nn.ReLU(True),
-        #     nn.Linear(feat_dim, 3*self.n_offsets),
-        #     nn.Sigmoid()
-        # ).cuda()
-        # ----------------------------------------------
-        self.opacity_dist_dim = 84 if self.add_opacity_dist else 0 # 1:dist, 21:dist_emb, 63: cam_emb, 84:cam_emb+dist_emb
+        self.opacity_dist_dim = 1 if self.add_opacity_dist else 0
         self.mlp_opacity = nn.Sequential(
-            nn.Linear(feat_dim+63+self.opacity_dist_dim, feat_dim),
+            nn.Linear(feat_dim+3+self.opacity_dist_dim, feat_dim),
             nn.ReLU(True),
             nn.Linear(feat_dim, n_offsets),
             nn.Tanh()
         ).cuda()
         self.add_cov_dist = add_cov_dist
-        self.cov_dist_dim = 84 if self.add_cov_dist else 0
+        self.cov_dist_dim = 1 if self.add_cov_dist else 0
         self.mlp_cov = nn.Sequential(
-            nn.Linear(feat_dim+63+self.cov_dist_dim, feat_dim),
+            nn.Linear(feat_dim+3+self.cov_dist_dim, feat_dim),
             nn.ReLU(True),
             nn.Linear(feat_dim, 7*self.n_offsets),
         ).cuda()
-        self.color_dist_dim = 84 if self.add_color_dist else 0
+        self.color_dist_dim = 1 if self.add_color_dist else 0
         self.mlp_color = nn.Sequential(
-            nn.Linear(feat_dim+63+self.color_dist_dim+self.appearance_dim, feat_dim),
+            nn.Linear(feat_dim+3+self.color_dist_dim+self.appearance_dim, feat_dim),
             nn.ReLU(True),
             nn.Linear(feat_dim, 3*self.n_offsets),
             nn.Sigmoid()
         ).cuda()
+        # ----------------------------------------------
+        self.mlp_offset = nn.Sequential(
+            nn.Linear(14+3+1, feat_dim),
+            nn.ReLU(True),
+            nn.Linear(feat_dim, 6),
+        ).cuda()
+        # self.mlp_offset_xyz = nn.Linear(feat_dim, 3).cuda() # 3*self.n_offsets
+        # self.mlp_offset_xyz = nn.Sequential(
+        #     nn.Linear(feat_dim, 3), # 3*self.n_offsets
+        #     nn.Sigmoid()
+        # ).cuda()
 
     def eval(self):
         self.mlp_opacity.eval()
         self.mlp_cov.eval()
         self.mlp_color.eval()
+        self.mlp_offset.eval()
+        # self.mlp_offset_xyz.eval()
+        # self.mlp_offset_color.eval()
         if self.appearance_dim > 0:
             self.embedding_appearance.eval()
         if self.use_feat_bank:
@@ -160,6 +152,9 @@ class GaussianModel:
         self.mlp_opacity.train()
         self.mlp_cov.train()
         self.mlp_color.train()
+        self.mlp_offset.train()
+        # self.mlp_offset_xyz.train()
+        # self.mlp_offset_color.train()
         if self.appearance_dim > 0:
             self.embedding_appearance.train()
         if self.use_feat_bank:                   
@@ -222,7 +217,18 @@ class GaussianModel:
     @property
     def get_color_mlp(self):
         return self.mlp_color
-    
+
+    # @property
+    # def get_offset_mlp_xyz(self):
+    #     return self.mlp_offset_xyz
+    # @property
+    # def get_offset_mlp_color(self):
+    #     return self.mlp_offset_color
+
+    @property
+    def get_offset_mlp(self):
+        return self.mlp_offset
+
     @property
     def get_rotation(self):
         return self.rotation_activation(self._rotation)
@@ -343,6 +349,7 @@ class GaussianModel:
                 {'params': self.mlp_opacity.parameters(), 'lr': training_args.mlp_opacity_lr_init, "name": "mlp_opacity"},
                 {'params': self.mlp_cov.parameters(), 'lr': training_args.mlp_cov_lr_init, "name": "mlp_cov"},
                 {'params': self.mlp_color.parameters(), 'lr': training_args.mlp_color_lr_init, "name": "mlp_color"},
+                {'params': self.mlp_offset.parameters(), 'lr': training_args.mlp_offset_lr_init, "name": "mlp_offset"},
             ]
 
         self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
@@ -369,6 +376,10 @@ class GaussianModel:
                                                     lr_final=training_args.mlp_color_lr_final,
                                                     lr_delay_mult=training_args.mlp_color_lr_delay_mult,
                                                     max_steps=training_args.mlp_color_lr_max_steps)
+        self.mlp_offset_scheduler_args = get_expon_lr_func(lr_init=training_args.mlp_offset_lr_init,
+                                                    lr_final=training_args.mlp_offset_lr_final,
+                                                    lr_delay_mult=training_args.mlp_offset_lr_delay_mult,
+                                                    max_steps=training_args.mlp_offset_lr_max_steps)
         if self.use_feat_bank:
             self.mlp_featurebank_scheduler_args = get_expon_lr_func(lr_init=training_args.mlp_featurebank_lr_init,
                                                         lr_final=training_args.mlp_featurebank_lr_final,
@@ -397,6 +408,9 @@ class GaussianModel:
                 param_group['lr'] = lr
             if param_group["name"] == "mlp_color":
                 lr = self.mlp_color_scheduler_args(iteration)
+                param_group['lr'] = lr
+            if param_group["name"] == "mlp_offset":
+                lr = self.mlp_offset_scheduler_args(iteration)
                 param_group['lr'] = lr
             if self.use_feat_bank and param_group["name"] == "mlp_featurebank":
                 lr = self.mlp_featurebank_scheduler_args(iteration)
@@ -651,7 +665,6 @@ class GaussianModel:
 
             remove_duplicates = ~remove_duplicates
             candidate_anchor = selected_grid_coords_unique[remove_duplicates]*cur_size# grid->xyz [N_an_select_3,3]
-            # import pdb;pdb.set_trace()
             
             
             if candidate_anchor.shape[0] > 0:
@@ -758,19 +771,26 @@ class GaussianModel:
         mkdir_p(os.path.dirname(path))
         if mode == 'split':
             self.mlp_opacity.eval()
-            opacity_mlp = torch.jit.trace(self.mlp_opacity, (torch.rand(1, self.feat_dim+63+self.opacity_dist_dim).cuda()))
+            opacity_mlp = torch.jit.trace(self.mlp_opacity, (torch.rand(1, self.feat_dim+3+self.opacity_dist_dim).cuda()))
             opacity_mlp.save(os.path.join(path, 'opacity_mlp.pt'))
             self.mlp_opacity.train()
 
             self.mlp_cov.eval()
-            cov_mlp = torch.jit.trace(self.mlp_cov, (torch.rand(1, self.feat_dim+63+self.cov_dist_dim).cuda()))
+            cov_mlp = torch.jit.trace(self.mlp_cov, (torch.rand(1, self.feat_dim+3+self.cov_dist_dim).cuda()))
             cov_mlp.save(os.path.join(path, 'cov_mlp.pt'))
             self.mlp_cov.train()
 
             self.mlp_color.eval()
-            color_mlp = torch.jit.trace(self.mlp_color, (torch.rand(1, self.feat_dim+63+self.color_dist_dim+self.appearance_dim).cuda()))
+            color_mlp = torch.jit.trace(self.mlp_color, (torch.rand(1, self.feat_dim+3+self.color_dist_dim+self.appearance_dim).cuda()))
             color_mlp.save(os.path.join(path, 'color_mlp.pt'))
             self.mlp_color.train()
+
+            # --------------------
+            self.mlp_offset.eval()
+            offset_mlp = torch.jit.trace(self.mlp_offset, (torch.rand(1, 14+3+1).cuda()))
+            offset_mlp.save(os.path.join(path, 'offset_mlp.pt'))
+            self.mlp_offset.train()
+            # --------------------
 
             if self.use_feat_bank:
                 self.mlp_feature_bank.eval()
@@ -815,10 +835,12 @@ class GaussianModel:
             self.mlp_opacity = torch.jit.load(os.path.join(path, 'opacity_mlp.pt')).cuda()
             self.mlp_cov = torch.jit.load(os.path.join(path, 'cov_mlp.pt')).cuda()
             self.mlp_color = torch.jit.load(os.path.join(path, 'color_mlp.pt')).cuda()
+            self.mlp_offset = torch.jit.load(os.path.join(path, 'offset_mlp.pt')).cuda()
             if self.use_feat_bank:
                 self.mlp_feature_bank = torch.jit.load(os.path.join(path, 'feature_bank_mlp.pt')).cuda()
             if self.appearance_dim > 0:
                 self.embedding_appearance = torch.jit.load(os.path.join(path, 'embedding_appearance.pt')).cuda()
+
         elif mode == 'unite':
             checkpoint = torch.load(os.path.join(path, 'checkpoints.pth'))
             self.mlp_opacity.load_state_dict(checkpoint['opacity_mlp'])

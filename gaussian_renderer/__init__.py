@@ -41,17 +41,6 @@ def generate_neural_gaussians(viewpoint_camera, pc : GaussianModel, visible_mask
     ob_dist = ob_view.norm(dim=1, keepdim=True)#[N_an,1]
     # view
     ob_view = ob_view / ob_dist#[N_an,3]
-    # -------------------------------------
-    # Fourier_emb
-    # ob_view: 3->63
-    embed_fn, out_dim = get_embedder(multires=10)
-    ob_view = embed_fn(ob_view)# [94556, 3]-->[94556, 63]
-    # ob_dist: 1->21
-    ob_dist = embed_fn(ob_dist)
-    # cam_center: 3->63
-    cam_center = embed_fn(viewpoint_camera.camera_center)
-    cam_center = cam_center.repeat(ob_view.shape[0], 1)
-    # -------------------------------------
 
     ## view-adaptive feature
     if pc.use_feat_bank:
@@ -66,10 +55,11 @@ def generate_neural_gaussians(viewpoint_camera, pc : GaussianModel, visible_mask
         feat = feat.squeeze(dim=-1) # [n, c]
 
     # cat dist
-    # cat_local_view = torch.cat([feat, ob_view, ob_dist], dim=1) # [N, c+3+1] eg.[94556, 36] -->96
+    cat_local_view = torch.cat([feat, ob_view, ob_dist], dim=1)
     # cat cam_center
     # cat_local_view = torch.cat([feat, ob_view, cam_center], dim=1)
-    cat_local_view = torch.cat([feat, ob_view, cam_center, ob_dist], dim=1)# all:32+63+63+21
+    # cat_local_view = torch.cat([feat, ob_view, cam_center, ob_dist], dim=1)
+    
     cat_local_view_wodist = torch.cat([feat, ob_view], dim=1) # [N, c+3]   -->95
     if pc.appearance_dim > 0:
         camera_indicies = torch.ones_like(cat_local_view[:,0], dtype=torch.long, device=ob_dist.device) * viewpoint_camera.uid
@@ -133,7 +123,41 @@ def generate_neural_gaussians(viewpoint_camera, pc : GaussianModel, visible_mask
     else:
         return xyz, color, opacity, scaling, rot
 
-def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, visible_mask=None, retain_grad=False):
+
+def grow_neural_gaussians(viewpoint_camera, pc, xyz, color, opacity, scaling, rot):
+    # mask-out
+    concatenated = torch.cat([xyz, color, opacity, scaling, rot], dim=-1)
+    # concatenated = concatenated[mask]
+    # xyz, color, opacity, scaling, rot = concatenated.split([3, 3, 1, 3, 4], dim=-1)
+
+
+    ## get view properties for gaussian
+    ob_view = xyz - viewpoint_camera.camera_center
+    # dist
+    ob_dist = ob_view.norm(dim=1, keepdim=True)  # [N,1]
+    # view
+    ob_view = ob_view / ob_dist  # [N,3]
+
+    # cat dist
+    cat_local_view = torch.cat([concatenated, ob_view, ob_dist], dim=1)
+
+    # cat cam_center
+    # cat_local_view = torch.cat([feat, ob_view, cam_center], dim=1)
+    # cat_local_view = torch.cat([feat, ob_view, cam_center, ob_dist], dim=1)
+
+    # get offset
+    offset = pc.get_offset_mlp(cat_local_view)
+    d_xyz, d_color = offset[:,:3], offset[:,3:]
+    # d_xyz = pc.get_offset_mlp_xyz(offset)
+    # d_color = pc.get_offset_mlp_color(offset)
+    xyz, color = xyz+d_xyz, color+d_color
+    
+    # color = color.reshape([anchor.shape[0] * pc.n_offsets, 3])  # [mask]
+    return xyz, color, opacity, scaling, rot
+
+
+
+def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, visible_mask=None, retain_grad=False, grow=False):
     """
     Render the scene. 
     
@@ -146,7 +170,12 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     else:
         xyz, color, opacity, scaling, rot = generate_neural_gaussians(viewpoint_camera, pc, visible_mask, is_training=is_training)
     
-
+    # ---------------------------------------
+    if grow:
+        # select_xyz wrt. gradient
+        xyz, color, opacity, scaling, rot = grow_neural_gaussians(viewpoint_camera, pc, xyz, color, opacity, scaling, rot)
+    # ---------------------------------------
+    
     # Create zero tensor. We will use it to make pytorch return gradients of the 2D (screen-space) means
     screenspace_points = torch.zeros_like(xyz, dtype=pc.get_anchor.dtype, requires_grad=True, device="cuda") + 0
     if retain_grad:
@@ -204,8 +233,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
                 "visibility_filter" : radii > 0,
                 "radii": radii,
                 }
-
-
+        
 def prefilter_voxel(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, override_color = None):
     """
     Render the scene. 
