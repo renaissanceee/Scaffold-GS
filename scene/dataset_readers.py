@@ -23,10 +23,6 @@ import numpy as np
 import json
 from pathlib import Path
 from plyfile import PlyData, PlyElement
-try:
-    import laspy
-except:
-    print("No laspy")
 from utils.sh_utils import SH2RGB
 from scene.gaussian_model import BasicPointCloud
 import cv2
@@ -307,10 +303,10 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png", ply_pa
     train_cam_infos = train_cam_infos+near_cam_infos
     print("Reading Test Transforms")
     # far
-    test_cam_infos = readCamerasFromTransforms(path, "transforms_test.json", white_background, extension)
+    # test_cam_infos = readCamerasFromTransforms(path, "transforms_test.json", white_background, extension)
     # near
-    # test_cam_infos = readCamerasFromTransforms(os.path.join(path,"near_z_2"), "updated_transforms_test.json", white_background, extension)
-
+    test_cam_infos = readCamerasFromTransforms(os.path.join(path,"near_z_2"), "updated_transforms_test.json", white_background, extension)
+ 
     if not eval:
         train_cam_infos.extend(test_cam_infos)
         test_cam_infos = []

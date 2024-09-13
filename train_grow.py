@@ -23,12 +23,12 @@ TENSORBOARD_FOUND = False
 
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint,
-             debug_from, logger, split_idx, stage):
+             debug_from, logger, split_idx, stage, add_dist):
     warmup_iter = 4999
     if args.stage == "uw_pretrain":
         first_iter = 0
         tb_writer = prepare_output_and_logger(dataset)
-        dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist = True, True, True
+        dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist = add_dist, add_dist, add_dist
         gaussians = GaussianModel(dataset.feat_dim, dataset.n_offsets, dataset.voxel_size, dataset.update_depth,
                                   dataset.update_init_factor, dataset.update_hierachy_factor, dataset.use_feat_bank,
                                   dataset.appearance_dim, dataset.ratio, dataset.add_opacity_dist, dataset.add_cov_dist,
@@ -100,18 +100,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     elif args.stage == "uw2wide":
         first_iter = 0
         tb_writer = prepare_output_and_logger(dataset)
-        dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist = True, True, True
+        dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist = add_dist, add_dist, add_dist
         gaussians = GaussianModel(dataset.feat_dim, dataset.n_offsets, dataset.voxel_size, dataset.update_depth,
                                   dataset.update_init_factor, dataset.update_hierachy_factor, dataset.use_feat_bank,
                                   dataset.appearance_dim, dataset.ratio, dataset.add_opacity_dist, dataset.add_cov_dist,
                                   dataset.add_color_dist)
         scene = Scene(dataset, gaussians, load_iteration=warmup_iter, shuffle=False)
         gaussians.training_setup(opt)
-        scene.gaussians.train()
-        # print(gaussians.get_color_mlp.training) # JJ
-        # import pdb;pdb.set_trace()
-        # gaussians.get_color_mlp.train()
-        print(gaussians.get_color_mlp.training)
+        scene.gaussians.train() # need to add
         
         if checkpoint:
             (model_params, first_iter) = torch.load(checkpoint)
@@ -144,7 +140,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             voxel_visible_mask = prefilter_voxel(viewpoint_cam_far, gaussians, pipe, background)
             retain_grad = (iteration < opt.update_until and iteration >= 0)
             render_pkg = render(viewpoint_cam_far, gaussians, pipe, background, visible_mask=voxel_visible_mask,
-                                retain_grad=retain_grad, grow=False)
+                                retain_grad=retain_grad, offset=False)
             image, viewspace_point_tensor, visibility_filter, offset_selection_mask, radii, scaling, opacity = render_pkg[
                 "render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["selection_mask"], \
             render_pkg["radii"], render_pkg["scaling"], render_pkg["neural_opacity"]
@@ -157,7 +153,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             # generate_neural_gaussian-->gradients-->masked_gaussians-->MLP-->gaussian_growing
             voxel_visible_mask = prefilter_voxel(viewpoint_cam_near, gaussians, pipe, background)
             render_pkg = render(viewpoint_cam_near, gaussians, pipe, background, visible_mask=voxel_visible_mask,
-                                retain_grad=retain_grad, grow=True)
+                                retain_grad=retain_grad, offset=True)
             image, viewspace_point_tensor, visibility_filter, offset_selection_mask, radii, scaling, opacity = render_pkg[
                 "render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["selection_mask"], \
             render_pkg["radii"], render_pkg["scaling"], render_pkg["neural_opacity"]
@@ -257,14 +253,14 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument("--stage", type=str, default = None)
     parser.add_argument("--test_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--save_iterations", nargs="+", type=int, default=[7000, 30_000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default=None)
-    parser.add_argument("--split_idx", type=int, default=10)
-    parser.add_argument("--gpu", type=str, default='-1')
+    parser.add_argument("--split_idx", type=int, default=10) # far[:10], near[10:]
+    parser.add_argument("--stage", type=str, default=None, help="uw_pretrain, uw2wide")
+    parser.add_argument("--add_dist", action="store_true", help="add dist into scaffold")
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
 
@@ -279,7 +275,7 @@ if __name__ == "__main__":
 
     # training
     training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations,
-             args.checkpoint_iterations, args.start_checkpoint, args.debug_from, logger=logger, split_idx=args.split_idx, stage=args.stage)
+             args.checkpoint_iterations, args.start_checkpoint, args.debug_from, logger=logger, split_idx=args.split_idx, stage=args.stage, add_dist=args.add_dist)
 
     # All done
     logger.info("\nTraining complete.")

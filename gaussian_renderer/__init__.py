@@ -53,17 +53,17 @@ def generate_neural_gaussians(viewpoint_camera, pc : GaussianModel, visible_mask
             feat[:,::2, :1].repeat([1,2,1])*bank_weight[:,:,1:2] + \
             feat[:,::1, :1]*bank_weight[:,:,2:]
         feat = feat.squeeze(dim=-1) # [n, c]
+    # wo dist
+    cat_local_view_wodist = torch.cat([feat, ob_view], dim=1)
 
-    # cat dist
+    # w dist
     cat_local_view = torch.cat([feat, ob_view, ob_dist], dim=1)
-    # cat cam_center
-    # cat_local_view = torch.cat([feat, ob_view, cam_center], dim=1)
+    # cat_local_view = torch.cat([feat, ob_view, cam_center], dim=1)# cat cam_center
     # cat_local_view = torch.cat([feat, ob_view, cam_center, ob_dist], dim=1)
     
-    cat_local_view_wodist = torch.cat([feat, ob_view], dim=1) # [N, c+3]   -->95
+
     if pc.appearance_dim > 0:
         camera_indicies = torch.ones_like(cat_local_view[:,0], dtype=torch.long, device=ob_dist.device) * viewpoint_camera.uid
-        # camera_indicies = torch.ones_like(cat_local_view[:,0], dtype=torch.long, device=ob_dist.device) * 10
         appearance = pc.get_appearance(camera_indicies)
 
     # get offset's opacity
@@ -124,7 +124,7 @@ def generate_neural_gaussians(viewpoint_camera, pc : GaussianModel, visible_mask
         return xyz, color, opacity, scaling, rot
 
 
-def grow_neural_gaussians(viewpoint_camera, pc, xyz, color, opacity, scaling, rot):
+def offset_neural_gaussians(viewpoint_camera, pc, xyz, color, opacity, scaling, rot):
     # mask-out
     concatenated = torch.cat([xyz, color, opacity, scaling, rot], dim=-1)
     # concatenated = concatenated[mask]
@@ -157,7 +157,7 @@ def grow_neural_gaussians(viewpoint_camera, pc, xyz, color, opacity, scaling, ro
 
 
 
-def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, visible_mask=None, retain_grad=False, grow=False):
+def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, visible_mask=None, retain_grad=False, offset=False):
     """
     Render the scene. 
     
@@ -171,9 +171,9 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         xyz, color, opacity, scaling, rot = generate_neural_gaussians(viewpoint_camera, pc, visible_mask, is_training=is_training)
     
     # ---------------------------------------
-    if grow:
+    if offset:
         # select_xyz wrt. gradient
-        xyz, color, opacity, scaling, rot = grow_neural_gaussians(viewpoint_camera, pc, xyz, color, opacity, scaling, rot)
+        xyz, color, opacity, scaling, rot = offset_neural_gaussians(viewpoint_camera, pc, xyz, color, opacity, scaling, rot)
     # ---------------------------------------
     
     # Create zero tensor. We will use it to make pytorch return gradients of the 2D (screen-space) means

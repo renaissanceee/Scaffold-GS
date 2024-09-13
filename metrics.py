@@ -61,8 +61,8 @@ def evaluate(model_paths, scale):
                 per_view_dict_polytopeonly[scene_dir][method] = {}
 
                 method_dir = test_dir / method
-                gt_dir = method_dir / f"gt_{scale}"
-                renders_dir = method_dir / f"test_preds_{scale}"
+                gt_dir = method_dir / f"gt"
+                renders_dir = method_dir / f"test_preds"
                 renders, gts, image_names = readImages(renders_dir, gt_dir)
 
                 ssims = []
