@@ -156,6 +156,28 @@ def offset_neural_gaussians(viewpoint_camera, pc, xyz, color, opacity, scaling, 
     return xyz, color, opacity, scaling, rot
 
 
+def grow_neural_gaussians(viewpoint_camera, pc, xyz, color, opacity, scaling, rot):
+    concatenated = torch.cat([xyz, color, opacity, scaling, rot], dim=-1)
+
+    ## get view properties for gaussian
+    ob_view = xyz - viewpoint_camera.camera_center
+    # dist
+    ob_dist = ob_view.norm(dim=1, keepdim=True)  # [N,1]
+    # view
+    ob_view = ob_view / ob_dist  # [N,3]
+
+    # cat dist
+    cat_local_view = torch.cat([concatenated, ob_view, ob_dist], dim=1))
+
+    # get offset
+    offset = pc.get_offset_mlp(cat_local_view)
+    d_xyz, d_color = offset[:, :3], offset[:, 3:]
+    # d_xyz = pc.get_offset_mlp_xyz(offset)
+    # d_color = pc.get_offset_mlp_color(offset)
+    xyz, color = xyz + d_xyz, color + d_color
+
+    # color = color.reshape([anchor.shape[0] * pc.n_offsets, 3])  # [mask]
+    return xyz, color, opacity, scaling, rot
 
 def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, visible_mask=None, retain_grad=False, offset=False):
     """
@@ -174,6 +196,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     if offset:
         # select_xyz wrt. gradient
         xyz, color, opacity, scaling, rot = offset_neural_gaussians(viewpoint_camera, pc, xyz, color, opacity, scaling, rot)
+        # xyz, color, opacity, scaling, rot = grow_neural_gaussians(viewpoint_camera, pc, xyz, color, opacity, scaling, rot)
     # ---------------------------------------
     
     # Create zero tensor. We will use it to make pytorch return gradients of the 2D (screen-space) means
