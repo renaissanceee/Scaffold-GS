@@ -41,8 +41,8 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
 
         torch.cuda.synchronize(); t0 = time.time()
         voxel_visible_mask = prefilter_voxel(view, gaussians, pipeline, background)
-        render_pkg = render(view, gaussians, pipeline, background, visible_mask=voxel_visible_mask, offset=True) # near
-        # render_pkg = render(view, gaussians, pipeline, background, visible_mask=voxel_visible_mask) # far
+        # render_pkg = render(view, gaussians, pipeline, background, visible_mask=voxel_visible_mask, offset=True) # near
+        render_pkg = render(view, gaussians, pipeline, background, visible_mask=voxel_visible_mask) # far
         torch.cuda.synchronize(); t1 = time.time()
         
         t_list.append(t1-t0)
@@ -60,8 +60,9 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
     with open(os.path.join(model_path, name, "ours_{}".format(iteration), "per_view_count.json"), 'w') as fp:
             json.dump(per_view_dict, fp, indent=True)      
      
-def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool):
+def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool, add_dist= bool):
     with torch.no_grad():
+        dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist = add_dist, add_dist, add_dist
         gaussians = GaussianModel(dataset.feat_dim, dataset.n_offsets, dataset.voxel_size, dataset.update_depth, dataset.update_init_factor, dataset.update_hierachy_factor, dataset.use_feat_bank, 
                               dataset.appearance_dim, dataset.ratio, dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist)
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
@@ -88,10 +89,11 @@ if __name__ == "__main__":
     parser.add_argument("--skip_train", action="store_true")
     parser.add_argument("--skip_test", action="store_true")
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--add_dist", action="store_true", help="add dist into scaffold")
     args = get_combined_args(parser)
     print("Rendering " + args.model_path)
 
     # Initialize system state (RNG)
     safe_state(args.quiet)
 
-    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test)
+    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, args.add_dist)

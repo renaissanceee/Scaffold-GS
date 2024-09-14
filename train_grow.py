@@ -64,7 +64,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             voxel_visible_mask = prefilter_voxel(viewpoint_cam_far, gaussians, pipe, background)
             retain_grad = (iteration < opt.update_until and iteration >= 0)
             render_pkg = render(viewpoint_cam_far, gaussians, pipe, background, visible_mask=voxel_visible_mask,
-                                retain_grad=retain_grad, grow=False)
+                                retain_grad=retain_grad, offset=False)
             image, viewspace_point_tensor, visibility_filter, offset_selection_mask, radii, scaling, opacity = render_pkg[
                 "render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["selection_mask"], \
             render_pkg["radii"], render_pkg["scaling"], render_pkg["neural_opacity"]
@@ -136,9 +136,22 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             # Render
             if (iteration - 1) == debug_from:
                 pipe.debug = True
+            retain_grad = (iteration < opt.update_until and iteration >= 0)
+            # near
+            # generate_neural_gaussian-->gradients-->masked_gaussians-->MLP-->gaussian_growing
+            voxel_visible_mask = prefilter_voxel(viewpoint_cam_near, gaussians, pipe, background)
+            render_pkg = render(viewpoint_cam_near, gaussians, pipe, background, visible_mask=voxel_visible_mask,retain_grad=retain_grad, offset=True)
+            image, viewspace_point_tensor, visibility_filter, offset_selection_mask, radii, scaling, opacity = render_pkg[
+                "render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["selection_mask"], \
+            render_pkg["radii"], render_pkg["scaling"], render_pkg["neural_opacity"]
+            gt_image = viewpoint_cam_near.original_image.cuda()
+            Ll1 = l1_loss(image, gt_image)
+            ssim_loss = (1.0 - ssim(image, gt_image))
+            scaling_reg = scaling.prod(dim=1).mean()
+            loss_near = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * ssim_loss + 0.01 * scaling_reg
+
             # far
             voxel_visible_mask = prefilter_voxel(viewpoint_cam_far, gaussians, pipe, background)
-            retain_grad = (iteration < opt.update_until and iteration >= 0)
             render_pkg = render(viewpoint_cam_far, gaussians, pipe, background, visible_mask=voxel_visible_mask,
                                 retain_grad=retain_grad, offset=False)
             image, viewspace_point_tensor, visibility_filter, offset_selection_mask, radii, scaling, opacity = render_pkg[
@@ -149,19 +162,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             ssim_loss = (1.0 - ssim(image, gt_image))
             scaling_reg = scaling.prod(dim=1).mean()
             loss_far = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * ssim_loss + 0.01 * scaling_reg
-            # near
-            # generate_neural_gaussian-->gradients-->masked_gaussians-->MLP-->gaussian_growing
-            voxel_visible_mask = prefilter_voxel(viewpoint_cam_near, gaussians, pipe, background)
-            render_pkg = render(viewpoint_cam_near, gaussians, pipe, background, visible_mask=voxel_visible_mask,
-                                retain_grad=retain_grad, offset=True)
-            image, viewspace_point_tensor, visibility_filter, offset_selection_mask, radii, scaling, opacity = render_pkg[
-                "render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["selection_mask"], \
-            render_pkg["radii"], render_pkg["scaling"], render_pkg["neural_opacity"]
-            gt_image = viewpoint_cam_near.original_image.cuda()
-            Ll1 = l1_loss(image, gt_image)
-            ssim_loss = (1.0 - ssim(image, gt_image))
-            scaling_reg = scaling.prod(dim=1).mean()
-            loss_near = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * ssim_loss + 0.01 * scaling_reg
 
             loss = loss_far + loss_near
             loss.backward()
@@ -183,6 +183,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 # densification
                 if iteration < opt.update_until and iteration > opt.start_stat:
                     # add statis
+                    # gaussians.training_statis_grow(viewspace_point_tensor, opacity, visibility_filter, offset_selection_mask,
+                    #                           voxel_visible_mask)
                     gaussians.training_statis(viewspace_point_tensor, opacity, visibility_filter, offset_selection_mask,
                                               voxel_visible_mask)
                     # densification
