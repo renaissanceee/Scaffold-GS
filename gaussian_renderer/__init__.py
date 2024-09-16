@@ -140,16 +140,16 @@ def grow_neural_gaussians(viewpoint_camera, pc, xyz, color, opacity, scaling, ro
     offsets = pc.get_offset_mlp_xyz(cat_local_view)
     offsets = offsets.reshape([xyz.shape[0] * pc.n_grow, 3])
     # -------------------------------
-    mlp = pc.mlp_offset_cov
-    for name, param in mlp.named_parameters():
-        print(f"Parameter: {name}, Requires Grad: {param.requires_grad}")
-    all_learnable = all(param.requires_grad for param in mlp.parameters())
-    if all_learnable:
-        print("The MLP is learnable.")
-        asd
-    else:
-        print("not learnable.")
-        asd
+    # mlp = pc.mlp_offset_cov
+    # for name, param in mlp.named_parameters():
+    #     print(f"Parameter: {name}, Requires Grad: {param.requires_grad}")
+    # all_learnable = all(param.requires_grad for param in mlp.parameters())
+    # if all_learnable:
+    #     print("The MLP is learnable.")
+    #     asd
+    # else:
+    #     print("not learnable.")
+    # asd
     # -------------------------------
     repeated = repeat(xyz, 'n (c) -> (n k) (c)', k=pc.n_grow)
     concatenated_all = torch.cat([repeated, color, scale_rot, offsets], dim=-1)
