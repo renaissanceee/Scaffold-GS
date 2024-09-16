@@ -1,26 +1,6 @@
-#
-# Copyright (C) 2023, Inria
-# GRAPHDECO research group, https://team.inria.fr/graphdeco
-# All rights reserved.
-#
-# This software is free for non-commercial, research and evaluation use 
-# under the terms of the LICENSE.md file.
-#
-# For inquiries contact  george.drettakis@inria.fr
-#
 import os
 import torch
-
 import numpy as np
-
-import subprocess
-
-cmd = 'nvidia-smi -q -d Memory |grep -A4 GPU|grep Used'
-result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE).stdout.decode().split('\n')
-os.environ['CUDA_VISIBLE_DEVICES'] = str(np.argmin([int(x.split()[2]) for x in result[:-1]]))
-
-os.system('echo $CUDA_VISIBLE_DEVICES')
-
 from scene import Scene
 import json
 import time
@@ -31,19 +11,11 @@ from utils.general_utils import safe_state
 from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
 from gaussian_renderer import GaussianModel
-from PIL import Image
-from torchvision import transforms
 
 
-def render_set(model_path, name, iteration, views, gaussians, pipeline, background, scale):
-    render_path = os.path.join(model_path, name, "ours_{}".format(iteration), f"test_preds_{scale}")
-    gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), f"gt_{scale}")
-    #######################
-    gt_root = model_path.replace("nerf_ours", "benchmark_stmt_nerf")
-    gt_root = gt_root.replace(f"/resize_x{scale}", "")
-    gt_root = gt_root.replace(f"/swin_x{scale}", "")
-    gt_folder = os.path.join(gt_root, "test", "ours_30000", f"gt_{scale}")
-    #######################
+def render_set(model_path, name, iteration, views, gaussians, pipeline, background):
+    render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "test_preds")
+    gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
     if not os.path.exists(render_path):
         os.makedirs(render_path)
     if not os.path.exists(gts_path):
@@ -51,27 +23,19 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
 
     name_list = []
     per_view_dict = {}
-    # debug = 0
     t_list = []
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         torch.cuda.synchronize();
         t0 = time.time()
         voxel_visible_mask = prefilter_voxel(view, gaussians, pipeline, background)
-        render_pkg = render(view, gaussians, pipeline, background, visible_mask=voxel_visible_mask)
+        render_pkg = render(view, gaussians, pipeline, background, visible_mask=voxel_visible_mask, offset=False)
         torch.cuda.synchronize();
         t1 = time.time()
 
         t_list.append(t1 - t0)
 
         rendering = render_pkg["render"]
-        # gt = view.original_image[0:3, :, :]
-        #################
-        gt_path_now = os.path.join(gt_folder, view.image_name + ".png")
-        gt = Image.open(gt_path_now)
-        gt.resize((view.image_width, view.image_height))
-        transform = transforms.ToTensor()
-        gt = transform(gt)
-        #################
+        gt = view.original_image[0:3, :, :]
         name_list.append(view.image_name + ".png")
         torchvision.utils.save_image(rendering, os.path.join(render_path, view.image_name + ".png"))
         torchvision.utils.save_image(gt, os.path.join(gts_path, view.image_name + ".png"))
@@ -85,14 +49,14 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
 
 
 def render_sets(dataset: ModelParams, iteration: int, pipeline: PipelineParams, skip_train: bool, skip_test: bool,
-                scale: int):
+                add_dist: bool):
     with torch.no_grad():
+        dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist = add_dist, add_dist, add_dist
         gaussians = GaussianModel(dataset.feat_dim, dataset.n_offsets, dataset.voxel_size, dataset.update_depth,
                                   dataset.update_init_factor, dataset.update_hierachy_factor, dataset.use_feat_bank,
                                   dataset.appearance_dim, dataset.ratio, dataset.add_opacity_dist, dataset.add_cov_dist,
                                   dataset.add_color_dist)
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
-
         gaussians.eval()
 
         bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
@@ -102,11 +66,11 @@ def render_sets(dataset: ModelParams, iteration: int, pipeline: PipelineParams, 
 
         if not skip_train:
             render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline,
-                       background, scale)
+                       background)
 
         if not skip_test:
-            render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline,
-                       background, scale)
+            render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline,
+                       background)
 
 
 if __name__ == "__main__":
@@ -118,7 +82,7 @@ if __name__ == "__main__":
     parser.add_argument("--skip_train", action="store_true")
     parser.add_argument("--skip_test", action="store_true")
     parser.add_argument("--quiet", action="store_true")
-    parser.add_argument("--scale", default=-1, type=int)
+    parser.add_argument("--add_dist", action="store_true", help="add dist into scaffold")
     args = get_combined_args(parser)
     print("Rendering " + args.model_path)
 
@@ -126,4 +90,4 @@ if __name__ == "__main__":
     safe_state(args.quiet)
 
     render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test,
-                args.scale)
+                args.add_dist)

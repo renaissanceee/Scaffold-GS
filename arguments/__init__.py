@@ -1,23 +1,14 @@
-#
-# Copyright (C) 2023, Inria
-# GRAPHDECO research group, https://team.inria.fr/graphdeco
-# All rights reserved.
-#
-# This software is free for non-commercial, research and evaluation use 
-# under the terms of the LICENSE.md file.
-#
-# For inquiries contact  george.drettakis@inria.fr
-#
-
 from argparse import ArgumentParser, Namespace
 import sys
 import os
 
+
 class GroupParams:
     pass
 
+
 class ParamGroup:
-    def __init__(self, parser: ArgumentParser, name : str, fill_none = False):
+    def __init__(self, parser: ArgumentParser, name: str, fill_none=False):
         group = parser.add_argument_group(name)
         for key, value in vars(self).items():
             shorthand = False
@@ -25,7 +16,7 @@ class ParamGroup:
                 shorthand = True
                 key = key[1:]
             t = type(value)
-            value = value if not fill_none else None 
+            value = value if not fill_none else None
             if shorthand:
                 if t == bool:
                     group.add_argument("--" + key, ("-" + key[0:1]), default=value, action="store_true")
@@ -44,12 +35,13 @@ class ParamGroup:
                 setattr(group, arg[0], arg[1])
         return group
 
-class ModelParams(ParamGroup): 
+
+class ModelParams(ParamGroup):
     def __init__(self, parser, sentinel=False):
         self.sh_degree = 3
         self.feat_dim = 32
         self.n_offsets = 10
-        self.voxel_size =  0.001 # if voxel_size<=0, using 1nn dist
+        self.voxel_size = 0.001  # if voxel_size<=0, using 1nn dist
         self.update_depth = 3
         self.update_init_factor = 16
         self.update_hierachy_factor = 4
@@ -67,21 +59,22 @@ class ModelParams(ParamGroup):
         self.appearance_dim = 32
         self.lowpoly = False
         self.ds = 1
-        self.ratio = 1 # sampling the input point cloud
-        self.undistorted = False 
-        
+        self.ratio = 1  # sampling the input point cloud
+        self.undistorted = False
+
         # In the Bungeenerf dataset, we propose to set the following three parameters to True,
         # Because there are enough dist variations.
         self.add_opacity_dist = False
         self.add_cov_dist = False
         self.add_color_dist = False
-        
+
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):
         g = super().extract(args)
         g.source_path = os.path.abspath(g.source_path)
         return g
+
 
 class PipelineParams(ParamGroup):
     def __init__(self, parser):
@@ -90,6 +83,7 @@ class PipelineParams(ParamGroup):
         self.debug = False
         super().__init__(parser, "Pipeline Parameters")
 
+
 class OptimizationParams(ParamGroup):
     def __init__(self, parser):
         self.iterations = 30_000
@@ -97,7 +91,7 @@ class OptimizationParams(ParamGroup):
         self.position_lr_final = 0.0
         self.position_lr_delay_mult = 0.01
         self.position_lr_max_steps = 30_000
-        
+
         self.offset_lr_init = 0.01
         self.offset_lr_final = 0.0001
         self.offset_lr_delay_mult = 0.01
@@ -107,10 +101,9 @@ class OptimizationParams(ParamGroup):
         self.opacity_lr = 0.02
         self.scaling_lr = 0.007
         self.rotation_lr = 0.002
-        
-        
+
         self.mlp_opacity_lr_init = 0.002
-        self.mlp_opacity_lr_final = 0.00002  
+        self.mlp_opacity_lr_final = 0.00002
         self.mlp_opacity_lr_delay_mult = 0.01
         self.mlp_opacity_lr_max_steps = 30_000
 
@@ -118,17 +111,34 @@ class OptimizationParams(ParamGroup):
         self.mlp_cov_lr_final = 0.004
         self.mlp_cov_lr_delay_mult = 0.01
         self.mlp_cov_lr_max_steps = 30_000
-        
-        self.mlp_color_lr_init = 0.008
-        self.mlp_color_lr_final = 0.00005
-        self.mlp_color_lr_delay_mult = 0.01
-        self.mlp_color_lr_max_steps = 30_000
 
         self.mlp_color_lr_init = 0.008
         self.mlp_color_lr_final = 0.00005
         self.mlp_color_lr_delay_mult = 0.01
         self.mlp_color_lr_max_steps = 30_000
-        
+
+        # --------------------------------
+        self.mlp_offset_xyz_lr_init = 0.008  # JJ
+        self.mlp_offset_xyz_lr_final = 0.00005
+        self.mlp_offset_xyz_lr_delay_mult = 0.01
+        self.mlp_offset_xyz_lr_max_steps = 30_000
+
+        self.mlp_offset_opacity_lr_init = 0.002
+        self.mlp_offset_opacity_lr_final = 0.00002
+        self.mlp_offset_opacity_lr_delay_mult = 0.01
+        self.mlp_offset_opacity_lr_max_steps = 30_000
+
+        self.mlp_offset_cov_lr_init = 0.004
+        self.mlp_offset_cov_lr_final = 0.004
+        self.mlp_offset_cov_lr_delay_mult = 0.01
+        self.mlp_offset_cov_lr_max_steps = 30_000
+
+        self.mlp_offset_color_lr_init = 0.008
+        self.mlp_offset_color_lr_final = 0.00005
+        self.mlp_offset_color_lr_delay_mult = 0.01
+        self.mlp_offset_color_lr_max_steps = 30_000
+        # --------------------------------
+
         self.mlp_featurebank_lr_init = 0.01
         self.mlp_featurebank_lr_final = 0.00001
         self.mlp_featurebank_lr_delay_mult = 0.01
@@ -141,20 +151,21 @@ class OptimizationParams(ParamGroup):
 
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2
-        
+
         # for anchor densification
         self.start_stat = 500
         self.update_from = 1500
         self.update_interval = 100
         self.update_until = 15_000
-        
+
         self.min_opacity = 0.005
         self.success_threshold = 0.8
         self.densify_grad_threshold = 0.0002
 
         super().__init__(parser, "Optimization Parameters")
 
-def get_combined_args(parser : ArgumentParser):
+
+def get_combined_args(parser: ArgumentParser):
     cmdlne_string = sys.argv[1:]
     cfgfile_string = "Namespace()"
     args_cmdline = parser.parse_args(cmdlne_string)
@@ -171,7 +182,7 @@ def get_combined_args(parser : ArgumentParser):
     args_cfgfile = eval(cfgfile_string)
 
     merged_dict = vars(args_cfgfile).copy()
-    for k,v in vars(args_cmdline).items():
+    for k, v in vars(args_cmdline).items():
         if v != None:
             merged_dict[k] = v
     return Namespace(**merged_dict)
