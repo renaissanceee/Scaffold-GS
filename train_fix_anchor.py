@@ -48,7 +48,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     viewpoint_stack_near = viewpoint_stack[split_idx:]
     print(f"num of far:near = {len(viewpoint_stack_far)}:{len(viewpoint_stack_near)}")
     ema_loss_for_log = 0.0
-    opt.iterations = 2000
+    opt.iterations = 10000
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
     for iteration in range(first_iter, opt.iterations + 1):
@@ -184,7 +184,7 @@ if __name__ == "__main__":
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
     parser.add_argument("--test_iterations", nargs="+", type=int, default=[])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[500, 1000, 1500, 2000])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[5000, 10000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default=None)
