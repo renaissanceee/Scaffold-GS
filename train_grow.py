@@ -148,6 +148,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             Ll1 = l1_loss(image, gt_image)
             ssim_loss = (1.0 - ssim(image, gt_image))
             scaling_reg = scaling.prod(dim=1).mean()
+            # identity: go through MLP
+            render_pkg = render(viewpoint_cam_far, gaussians, pipe, background, visible_mask=voxel_visible_mask,
+                                retain_grad=retain_grad, offset=True)
+            d_xyz = render_pkg["d_xyz"]
+            d_color = render_pkg["d_color"]
+            loss_identity = torch.abs(d_xyz).mean() + torch.abs(d_color).mean()
             loss_far = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * ssim_loss + 0.01 * scaling_reg
             # near
             # generate_neural_gaussian-->gradients-->masked_gaussians-->MLP-->gaussian_growing
@@ -163,7 +169,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             scaling_reg = scaling.prod(dim=1).mean()
             loss_near = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * ssim_loss + 0.01 * scaling_reg
 
-            loss = loss_far + loss_near
+            loss = loss_far + loss_near + loss_identity
             loss.backward()
 
             iter_end.record()
