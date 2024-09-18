@@ -22,7 +22,7 @@ class Scene:
 
     gaussians : GaussianModel
 
-    def __init__(self, args : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0], ply_path=None):
+    def __init__(self, args : ModelParams, gaussians : GaussianModel, load_iteration=None, load_gaussian=None, frozen_anchor=False, frozen_scaffold=False, shuffle=True, resolution_scales=[1.0], ply_path=None):
         """b
         :param path: Path to colmap scene main folder.
         """
@@ -91,6 +91,15 @@ class Scene:
             self.gaussians.load_mlp_checkpoints(os.path.join(self.model_path,
                                                            "point_cloud",
                                                            "iteration_" + str(self.loaded_iter)))
+        elif load_gaussian:
+            if frozen_scaffold:
+                self.gaussians.load_mlp_checkpoints_frozen(load_gaussian)
+            else:
+                self.gaussians.load_mlp_checkpoints(load_gaussian)
+            if frozen_anchor:
+                self.gaussians.load_ply_sparse_gaussian_frozen(os.path.join(load_gaussian, "point_cloud.ply"))
+            else:
+                self.gaussians.load_ply_sparse_gaussian(os.path.join(load_gaussian, "point_cloud.ply"))
         else:
             self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
 

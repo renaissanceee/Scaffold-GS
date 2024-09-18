@@ -55,6 +55,7 @@ class ModelParams(ParamGroup):
         self.update_hierachy_factor = 4
 
         self.use_feat_bank = False
+        self.use_scaling_bank = False
         self._source_path = ""
         self._model_path = ""
         self._images = "images"
@@ -123,16 +124,16 @@ class OptimizationParams(ParamGroup):
         self.mlp_color_lr_final = 0.00005
         self.mlp_color_lr_delay_mult = 0.01
         self.mlp_color_lr_max_steps = 30_000
-
-        self.mlp_color_lr_init = 0.008
-        self.mlp_color_lr_final = 0.00005
-        self.mlp_color_lr_delay_mult = 0.01
-        self.mlp_color_lr_max_steps = 30_000
         
         self.mlp_featurebank_lr_init = 0.01
         self.mlp_featurebank_lr_final = 0.00001
         self.mlp_featurebank_lr_delay_mult = 0.01
         self.mlp_featurebank_lr_max_steps = 30_000
+
+        self.mlp_scalingbank_lr_init = 0.01
+        self.mlp_scalingbank_lr_final = 0.00001
+        self.mlp_scalingbank_lr_delay_mult = 0.01
+        self.mlp_scalingbank_lr_max_steps = 30_000
 
         self.appearance_lr_init = 0.05
         self.appearance_lr_final = 0.0005

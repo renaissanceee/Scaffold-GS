@@ -24,16 +24,26 @@ TENSORBOARD_FOUND = False
 
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint,
-             debug_from, logger, split_idx):
-
+             debug_from, logger, split_idx, warm_up):
+    dataset.use_feat_bank, dataset.use_scaling_bank = True, True # activate bank MLP
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.feat_dim, dataset.n_offsets, dataset.voxel_size, dataset.update_depth,
-                              dataset.update_init_factor, dataset.update_hierachy_factor, dataset.use_feat_bank,
+                              dataset.update_init_factor, dataset.update_hierachy_factor, dataset.use_feat_bank,dataset.use_scaling_bank,
                               dataset.appearance_dim, dataset.ratio, dataset.add_opacity_dist, dataset.add_cov_dist,
                               dataset.add_color_dist)
-    scene = Scene(dataset, gaussians, shuffle=False)
+    scene = Scene(dataset, gaussians, load_gaussian=warm_up, frozen_anchor=True, frozen_scaffold=True, shuffle=False)
     gaussians.training_setup(opt)
+    # TODO: 1) freeze fea/scaling/scaffold, update bank_mlp, wo. ADC
+    # 2) update fea/scaling/scaffold/bank_mlp, w ADC                    -->better
+    # 3) batch=2, ADC wrt near
+
+    # --------------(1): only ft at near---------------
+    ## have a check for gradients
+    # print([(name, param.requires_grad) for name, param in gaussians.mlp_opacity.named_parameters()]) # scaffold is learnable?
+    # print(gaussians._anchor_feat) # feature is learnable?
+    # print([(name, param.requires_grad) for name, param in gaussians.mlp_feature_bank.named_parameters()])  # bank is learnable?
+    # import pdb;pdb.set_trace()
 
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
@@ -43,7 +53,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     iter_end = torch.cuda.Event(enable_timing=True)
 
     viewpoint_stack = scene.getTrainCameras().copy()
+    viewpoint_stack = viewpoint_stack[split_idx:] # only near
     ema_loss_for_log = 0.0
+    opt.iterations = sorted(saving_iterations, reverse=True)[1]# TODO
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
     for iteration in range(first_iter, opt.iterations + 1):
@@ -63,11 +75,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         retain_grad = (iteration < opt.update_until and iteration >= 0)
         render_pkg = render(viewpoint_cam, gaussians, pipe, background, visible_mask=voxel_visible_mask,
                             retain_grad=retain_grad)
-        image, viewspace_point_tensor, visibility_filter, offset_selection_mask, radii, scaling, opacity = \
-        render_pkg[
-            "render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg[
-            "selection_mask"], \
-            render_pkg["radii"], render_pkg["scaling"], render_pkg["neural_opacity"]
+        image, scaling = render_pkg["render"], render_pkg["scaling"]
         gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image)
         ssim_loss = (1.0 - ssim(image, gt_image))
@@ -75,7 +83,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * ssim_loss + 0.01 * scaling_reg
 
         loss.backward()
-
         iter_end.record()
 
         with torch.no_grad():
@@ -91,15 +98,15 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 logger.info("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
             # densification
-            if iteration < opt.update_until and iteration > opt.start_stat:
-                # add statis
-                gaussians.training_statis(viewspace_point_tensor, opacity, visibility_filter, offset_selection_mask,
-                                          voxel_visible_mask)
-                # densification
-                if iteration > opt.update_from and iteration % opt.update_interval == 0:
-                    gaussians.adjust_anchor(check_interval=opt.update_interval,
-                                            success_threshold=opt.success_threshold,
-                                            grad_threshold=opt.densify_grad_threshold, min_opacity=opt.min_opacity)
+            # if iteration < opt.update_until and iteration > opt.start_stat:
+            #     # add statis
+            #     gaussians.training_statis(viewspace_point_tensor, opacity, visibility_filter, offset_selection_mask,
+            #                               voxel_visible_mask)
+            #     # densification
+            #     if iteration > opt.update_from and iteration % opt.update_interval == 0:
+            #         gaussians.adjust_anchor(check_interval=opt.update_interval,
+            #                                 success_threshold=opt.success_threshold,
+            #                                 grad_threshold=opt.densify_grad_threshold, min_opacity=opt.min_opacity)
             elif iteration == opt.update_until:
                 del gaussians.opacity_accum
                 del gaussians.offset_gradient_accum
@@ -165,11 +172,12 @@ if __name__ == "__main__":
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
     parser.add_argument("--test_iterations", nargs="+", type=int, default=[])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[5000, 10_000, 30_000])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[5_000, 10_000, 30_000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default=None)
     parser.add_argument("--split_idx", type=int, default=100)  # far[:10], near[10:]
+    parser.add_argument("--warm_up", type=str, default="ckpt/hotdog_warmup/point_cloud/iteration_30000")
     # parser.add_argument("--stage", type=str, default=None, help="uw_pretrain, uw2wide")
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
@@ -186,7 +194,7 @@ if __name__ == "__main__":
     # training
     training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations,
              args.checkpoint_iterations, args.start_checkpoint, args.debug_from, logger=logger,
-             split_idx=args.split_idx)
+             split_idx=args.split_idx, warm_up=args.warm_up)
 
     # All done
     logger.info("\nTraining complete.")
