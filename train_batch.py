@@ -44,6 +44,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     iter_end = torch.cuda.Event(enable_timing=True)
 
     viewpoint_stack = scene.getTrainCameras().copy()
+    viewpoint_stack_far = viewpoint_stack[:split_idx]  # 10
+    viewpoint_stack_near = viewpoint_stack[split_idx:]
+    print(f"num of far:near = {len(viewpoint_stack_far)}:{len(viewpoint_stack_near)}")
     ema_loss_for_log = 0.0
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
@@ -54,27 +57,43 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
         # Pick a random Camera
-        viewpoint_cam = viewpoint_stack[randint(0, len(viewpoint_stack) - 1)]
+        viewpoint_cam_far = viewpoint_stack_far[randint(0, len(viewpoint_stack_far) - 1)]
+        viewpoint_cam_near = viewpoint_stack_near[randint(0, len(viewpoint_stack_near) - 1)]
 
         # Render
         if (iteration - 1) == debug_from:
             pipe.debug = True
-
-        voxel_visible_mask = prefilter_voxel(viewpoint_cam, gaussians, pipe, background)
+        # far
+        voxel_visible_mask = prefilter_voxel(viewpoint_cam_far, gaussians, pipe, background)
         retain_grad = (iteration < opt.update_until and iteration >= 0)
-        render_pkg = render(viewpoint_cam, gaussians, pipe, background, visible_mask=voxel_visible_mask,
+        render_pkg = render(viewpoint_cam_far, gaussians, pipe, background, visible_mask=voxel_visible_mask,
                             retain_grad=retain_grad)
         image, viewspace_point_tensor, visibility_filter, offset_selection_mask, radii, scaling, opacity = \
         render_pkg[
             "render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg[
             "selection_mask"], \
             render_pkg["radii"], render_pkg["scaling"], render_pkg["neural_opacity"]
-        gt_image = viewpoint_cam.original_image.cuda()
+        gt_image = viewpoint_cam_far.original_image.cuda()
         Ll1 = l1_loss(image, gt_image)
         ssim_loss = (1.0 - ssim(image, gt_image))
         scaling_reg = scaling.prod(dim=1).mean()
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * ssim_loss + 0.01 * scaling_reg
+        loss_far = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * ssim_loss + 0.01 * scaling_reg
+        # near
+        voxel_visible_mask = prefilter_voxel(viewpoint_cam_near, gaussians, pipe, background)
+        render_pkg = render(viewpoint_cam_near, gaussians, pipe, background, visible_mask=voxel_visible_mask,
+                            retain_grad=retain_grad)
+        image, viewspace_point_tensor, visibility_filter, offset_selection_mask, radii, scaling, opacity = \
+        render_pkg[
+            "render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg[
+            "selection_mask"], \
+            render_pkg["radii"], render_pkg["scaling"], render_pkg["neural_opacity"]
+        gt_image = viewpoint_cam_near.original_image.cuda()
+        Ll1 = l1_loss(image, gt_image)
+        ssim_loss = (1.0 - ssim(image, gt_image))
+        scaling_reg = scaling.prod(dim=1).mean()
+        loss_near = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * ssim_loss + 0.01 * scaling_reg
 
+        loss = loss_far + loss_near
         loss.backward()
 
         iter_end.record()
@@ -172,6 +191,7 @@ if __name__ == "__main__":
     parser.add_argument("--start_checkpoint", type=str, default=None)
     parser.add_argument("--split_idx", type=int, default=10)  # far[:10], near[10:]
     # parser.add_argument("--stage", type=str, default=None, help="uw_pretrain, uw2wide")
+    # parser.add_argument("--add_dist", action="store_true", help="add dist into scaffold")
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
 

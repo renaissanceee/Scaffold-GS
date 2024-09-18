@@ -23,10 +23,7 @@ import numpy as np
 import json
 from pathlib import Path
 from plyfile import PlyData, PlyElement
-try:
-    import laspy
-except:
-    print("No laspy")
+
 from utils.sh_utils import SH2RGB
 from scene.gaussian_model import BasicPointCloud
 import cv2
@@ -50,13 +47,7 @@ class SceneInfo(NamedTuple):
     test_cameras: list
     nerf_normalization: dict
     ply_path: str
-class SceneInfo_z(NamedTuple):
-    point_cloud: BasicPointCloud
-    train_cameras: list
-    test_cameras: list
-    near_cameras: list
-    nerf_normalization: dict
-    ply_path: str
+
 def getNerfppNorm(cam_info):
     def get_center_and_diag(cam_centers):
         cam_centers = np.hstack(cam_centers)
@@ -307,10 +298,10 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png", ply_pa
     train_cam_infos = train_cam_infos+near_cam_infos
     print("Reading Test Transforms")
     # far
-    test_cam_infos = readCamerasFromTransforms(path, "transforms_test.json", white_background, extension)
+    # test_cam_infos = readCamerasFromTransforms(path, "transforms_test.json", white_background, extension)
     # near
-    # test_cam_infos = readCamerasFromTransforms(os.path.join(path,"near_z_2"), "updated_transforms_test.json", white_background, extension)
-
+    test_cam_infos = readCamerasFromTransforms(os.path.join(path,"near_z_2"), "updated_transforms_test.json", white_background, extension)
+    
     if not eval:
         train_cam_infos.extend(test_cam_infos)
         test_cam_infos = []
@@ -340,7 +331,6 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png", ply_pa
                            nerf_normalization=nerf_normalization,
                            ply_path=ply_path)
     return scene_info
-
 
 sceneLoadTypeCallbacks = {
     "Colmap": readColmapSceneInfo,
