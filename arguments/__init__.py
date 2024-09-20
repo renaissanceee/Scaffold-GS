@@ -75,6 +75,7 @@ class ModelParams(ParamGroup):
         self.add_opacity_dist = False
         self.add_cov_dist = False
         self.add_color_dist = False
+
         
         super().__init__(parser, "Loading Parameters", sentinel)
 
@@ -137,6 +138,10 @@ class OptimizationParams(ParamGroup):
         self.appearance_lr_final = 0.0005
         self.appearance_lr_delay_mult = 0.01
         self.appearance_lr_max_steps = 30_000
+
+        # Hash-grid
+        self.net_lr = 0.01
+        self.net_lr_step = [5_000, 15_000, 25_000]
 
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2

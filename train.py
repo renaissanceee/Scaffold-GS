@@ -44,7 +44,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     iter_end = torch.cuda.Event(enable_timing=True)
 
     viewpoint_stack = scene.getTrainCameras().copy()
-    # viewpoint_stack = viewpoint_stack[:split_idx] # far_only
+    viewpoint_stack = viewpoint_stack[:split_idx] # far_only
     ema_loss_for_log = 0.0
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1

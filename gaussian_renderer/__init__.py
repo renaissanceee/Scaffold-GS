@@ -21,25 +21,23 @@ def generate_neural_gaussians(viewpoint_camera, pc : GaussianModel, visible_mask
     if visible_mask is None:
         visible_mask = torch.ones(pc.get_anchor.shape[0], dtype=torch.bool, device = pc.get_anchor.device)
     
-    feat = pc._anchor_feat[visible_mask] 
     anchor = pc.get_anchor[visible_mask] 
     grid_offsets = pc._offset[visible_mask] 
     grid_scaling = pc.get_scaling[visible_mask] 
 
     ## get view properties for anchor
-    # ob_view = anchor - viewpoint_camera.camera_center
-    # ob_dist = ob_view.norm(dim=1, keepdim=True)#[N_an,1]
-    # ob_view = ob_view / ob_dist
-    # cat_local_view = torch.cat([feat, ob_view, cam_center, ob_dist], dim=1)
-    
-    ## decouple view_dir, feat
-    # cat_local_view = feat # 32
-    cat_local_view = torch.cat([feat, anchor], dim=1) # 32+3
+    ob_view = anchor - viewpoint_camera.camera_center
+    ob_dist = ob_view.norm(dim=1, keepdim=True)#[N_an,1]
+    ob_view = ob_view / ob_dist
 
-    # ----------------------------------
-    # shared layer
-    # cat_local_view = pc.get_head_mlp(cat_local_view)
-    # ----------------------------------
+    ######################################################
+    anchor_rr = pc.contract_to_unisphere(anchor.clone().detach(),
+                                   torch.tensor([-1.0, -1.0, -1.0, 1.0, 1.0, 1.0], device='cuda'))
+    ob_view = anchor - viewpoint_camera.camera_center
+    ob_dist = ob_view.norm(dim=1, keepdim=True)
+    ob_view = ob_view / ob_dist
+    cat_local_view = torch.cat([pc.recolor(anchor_rr), pc.direction_encoding(ob_view)], dim=-1) # pc.fourier_encoding(dist)
+    ######################################################
 
     # get offset's opacity
     neural_opacity = pc.get_opacity_mlp(cat_local_view) # [N, k]
@@ -53,19 +51,19 @@ def generate_neural_gaussians(viewpoint_camera, pc : GaussianModel, visible_mask
     opacity = neural_opacity[mask]
 
     # get offset's color
-    color = pc.get_color_mlp(cat_local_view)
-    color = color.reshape([anchor.shape[0]*pc.n_offsets, 3])# [mask]
+    color = pc.get_color_mlp(cat_local_view) 
+    color = color.reshape([anchor.shape[0]*pc.n_offsets, 3])
 
     # get offset's cov
     scale_rot = pc.get_cov_mlp(cat_local_view)
-    scale_rot = scale_rot.reshape([anchor.shape[0]*pc.n_offsets, 7]) # [mask] #[N_an,70]->[N_gau,7]
+    scale_rot = scale_rot.reshape([anchor.shape[0]*pc.n_offsets, 7])
     
     # offsets
     offsets = grid_offsets.view([-1, 3]) # [mask]
     
     # combine for parallel masking
     concatenated = torch.cat([grid_scaling, anchor], dim=-1)
-    concatenated_repeated = repeat(concatenated, 'n (c) -> (n k) (c)', k=pc.n_offsets)#[N_an,9]->[N_gau,9]: 1for10
+    concatenated_repeated = repeat(concatenated, 'n (c) -> (n k) (c)', k=pc.n_offsets) 
     concatenated_all = torch.cat([concatenated_repeated, color, scale_rot, offsets], dim=-1)
     masked = concatenated_all[mask]
     scaling_repeat, repeat_anchor, color, scale_rot, offsets = masked.split([6, 3, 3, 7, 3], dim=-1)
@@ -126,16 +124,16 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     )
 
     rasterizer = GaussianRasterizer(raster_settings=raster_settings)
-    
+
     # Rasterize visible Gaussians to image, obtain their radii (on screen). 
     rendered_image, radii = rasterizer(
         means3D = xyz,
         means2D = screenspace_points,
         shs = None,
-        colors_precomp = color,
-        opacities = opacity,
-        scales = scaling,
-        rotations = rot,
+        colors_precomp = color.float(),
+        opacities = opacity.float(),
+        scales = scaling.float(),
+        rotations = rot.float(),
         cov3D_precomp = None)
     
     # Those Gaussians that were frustum culled or had a radius of 0 were not visible.
