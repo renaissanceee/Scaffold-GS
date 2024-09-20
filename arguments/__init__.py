@@ -49,9 +49,9 @@ class ModelParams(ParamGroup):
         self.sh_degree = 3
         self.feat_dim = 32
         self.n_offsets = 10
-        self.voxel_size =  0.001 # if voxel_size<=0, using 1nn dist
+        self.voxel_size =  0 # 0.001 (if voxel_size<=0, using 1nn dist)
         self.update_depth = 3
-        self.update_init_factor = 16
+        self.update_init_factor = 4 # 16
         self.update_hierachy_factor = 4
 
         self.use_feat_bank = False
@@ -64,7 +64,7 @@ class ModelParams(ParamGroup):
         self.eval = False
         self.lod = 0
 
-        self.appearance_dim = 32
+        self.appearance_dim = 0
         self.lowpoly = False
         self.ds = 1
         self.ratio = 1 # sampling the input point cloud
