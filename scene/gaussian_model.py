@@ -21,7 +21,7 @@ from plyfile import PlyData, PlyElement
 from simple_knn._C import distCUDA2
 from utils.graphics_utils import BasicPointCloud
 from utils.general_utils import strip_symmetric, build_scaling_rotation
-from scene.embedding import Embedding
+# from scene.embedding import Embedding
 
     
 class GaussianModel:
@@ -103,25 +103,42 @@ class GaussianModel:
                 nn.Softmax(dim=1)
             ).cuda()
 
-        self.opacity_dist_dim = 1 if self.add_opacity_dist else 0
+        # self.opacity_dist_dim = 1 if self.add_opacity_dist else 0
+        # self.mlp_opacity = nn.Sequential(
+        #     nn.Linear(feat_dim+3+self.opacity_dist_dim, feat_dim),
+        #     nn.ReLU(True),
+        #     nn.Linear(feat_dim, n_offsets),
+        #     nn.Tanh()
+        # ).cuda()
+        # 
+        # self.cov_dist_dim = 1 if self.add_cov_dist else 0
+        # self.mlp_cov = nn.Sequential(
+        #     nn.Linear(feat_dim+3+self.cov_dist_dim, feat_dim),
+        #     nn.ReLU(True),
+        #     nn.Linear(feat_dim, 7*self.n_offsets),
+        # ).cuda()
+        # 
+        # self.color_dist_dim = 1 if self.add_color_dist else 0
+        # self.mlp_color = nn.Sequential(
+        #     nn.Linear(feat_dim+3+self.color_dist_dim+self.appearance_dim, feat_dim),
+        #     nn.ReLU(True),
+        #     nn.Linear(feat_dim, 3*self.n_offsets),
+        #     nn.Sigmoid()
+        # ).cuda()
+         ## decouple: no view_dir input MLP
         self.mlp_opacity = nn.Sequential(
-            nn.Linear(feat_dim+3+self.opacity_dist_dim, feat_dim),
+            nn.Linear(feat_dim, feat_dim),
             nn.ReLU(True),
             nn.Linear(feat_dim, n_offsets),
             nn.Tanh()
         ).cuda()
-
-        self.add_cov_dist = add_cov_dist
-        self.cov_dist_dim = 1 if self.add_cov_dist else 0
         self.mlp_cov = nn.Sequential(
-            nn.Linear(feat_dim+3+self.cov_dist_dim, feat_dim),
+            nn.Linear(feat_dim, feat_dim),
             nn.ReLU(True),
             nn.Linear(feat_dim, 7*self.n_offsets),
         ).cuda()
-
-        self.color_dist_dim = 1 if self.add_color_dist else 0
         self.mlp_color = nn.Sequential(
-            nn.Linear(feat_dim+3+self.color_dist_dim+self.appearance_dim, feat_dim),
+            nn.Linear(feat_dim, feat_dim),
             nn.ReLU(True),
             nn.Linear(feat_dim, 3*self.n_offsets),
             nn.Sigmoid()
@@ -178,7 +195,8 @@ class GaussianModel:
 
     def set_appearance(self, num_cameras):
         if self.appearance_dim > 0:
-            self.embedding_appearance = Embedding(num_cameras, self.appearance_dim).cuda()
+            # self.embedding_appearance = Embedding(num_cameras, self.appearance_dim).cuda()
+            self.embedding_appearance = None
 
     @property
     def get_appearance(self):
@@ -737,18 +755,33 @@ class GaussianModel:
     def save_mlp_checkpoints(self, path, mode = 'split'):#split or unite
         mkdir_p(os.path.dirname(path))
         if mode == 'split':
+            # self.mlp_opacity.eval()
+            # opacity_mlp = torch.jit.trace(self.mlp_opacity, (torch.rand(1, self.feat_dim+3+self.opacity_dist_dim).cuda()))
+            # opacity_mlp.save(os.path.join(path, 'opacity_mlp.pt'))
+            # self.mlp_opacity.train()
+            # 
+            # self.mlp_cov.eval()
+            # cov_mlp = torch.jit.trace(self.mlp_cov, (torch.rand(1, self.feat_dim+3+self.cov_dist_dim).cuda()))
+            # cov_mlp.save(os.path.join(path, 'cov_mlp.pt'))
+            # self.mlp_cov.train()
+            # 
+            # self.mlp_color.eval()
+            # color_mlp = torch.jit.trace(self.mlp_color, (torch.rand(1, self.feat_dim+3+self.color_dist_dim+self.appearance_dim).cuda()))
+            # color_mlp.save(os.path.join(path, 'color_mlp.pt'))
+            # self.mlp_color.train()
+            
             self.mlp_opacity.eval()
-            opacity_mlp = torch.jit.trace(self.mlp_opacity, (torch.rand(1, self.feat_dim+3+self.opacity_dist_dim).cuda()))
+            opacity_mlp = torch.jit.trace(self.mlp_opacity, (torch.rand(1, self.feat_dim).cuda()))
             opacity_mlp.save(os.path.join(path, 'opacity_mlp.pt'))
             self.mlp_opacity.train()
 
             self.mlp_cov.eval()
-            cov_mlp = torch.jit.trace(self.mlp_cov, (torch.rand(1, self.feat_dim+3+self.cov_dist_dim).cuda()))
+            cov_mlp = torch.jit.trace(self.mlp_cov, (torch.rand(1, self.feat_dim).cuda()))
             cov_mlp.save(os.path.join(path, 'cov_mlp.pt'))
             self.mlp_cov.train()
 
             self.mlp_color.eval()
-            color_mlp = torch.jit.trace(self.mlp_color, (torch.rand(1, self.feat_dim+3+self.color_dist_dim+self.appearance_dim).cuda()))
+            color_mlp = torch.jit.trace(self.mlp_color, (torch.rand(1, self.feat_dim).cuda()))
             color_mlp.save(os.path.join(path, 'color_mlp.pt'))
             self.mlp_color.train()
 

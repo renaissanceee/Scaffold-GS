@@ -15,15 +15,6 @@ from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianR
 from scene.gaussian_model import GaussianModel
 from utils.emb_utils import Embedder,get_embedder
 
-embedder_params = {
-    'input_dims': 3,           # 输入维度
-    'include_input': True,     # 是否包含输入本身
-    'max_freq_log2': 4,        # 最大频率的对数
-    'num_freqs': 10,           # 频率数量
-    'log_sampling': True,      # 是否对数采样频率
-    'periodic_fns': [torch.sin, torch.cos]  # 周期函数
-}
-embedder = Embedder(**embedder_params)
 
 def generate_neural_gaussians(viewpoint_camera, pc : GaussianModel, visible_mask=None, is_training=False):
     ## view frustum filtering for acceleration    
@@ -36,51 +27,16 @@ def generate_neural_gaussians(viewpoint_camera, pc : GaussianModel, visible_mask
     grid_scaling = pc.get_scaling[visible_mask]#[N_an,6]
 
     ## get view properties for anchor
-    ob_view = anchor - viewpoint_camera.camera_center
-    # dist
-    ob_dist = ob_view.norm(dim=1, keepdim=True)#[N_an,1]
-    # view
-    ob_view = ob_view / ob_dist#[N_an,3]
-    # -------------------------------------
-    # Fourier_emb
-    # ob_view: 3->63
-    embed_fn, out_dim = get_embedder(multires=10)
-    ob_view = embed_fn(ob_view)# [94556, 3]-->[94556, 63]
-    # ob_dist: 1->21
-    ob_dist = embed_fn(ob_dist)
-    # cam_center: 3->63
-    cam_center = embed_fn(viewpoint_camera.camera_center)
-    cam_center = cam_center.repeat(ob_view.shape[0], 1)
-    # -------------------------------------
-
-    ## view-adaptive feature
-    if pc.use_feat_bank:
-        cat_view = torch.cat([ob_view, ob_dist], dim=1)
-        bank_weight = pc.get_featurebank_mlp(cat_view).unsqueeze(dim=1) # [n, 1, 3]
-
-        ## multi-resolution feat
-        feat = feat.unsqueeze(dim=-1)
-        feat = feat[:,::4, :1].repeat([1,4,1])*bank_weight[:,:,:1] + \
-            feat[:,::2, :1].repeat([1,2,1])*bank_weight[:,:,1:2] + \
-            feat[:,::1, :1]*bank_weight[:,:,2:]
-        feat = feat.squeeze(dim=-1) # [n, c]
-
-    # cat dist
-    # cat_local_view = torch.cat([feat, ob_view, ob_dist], dim=1) # [N, c+3+1] eg.[94556, 36] -->96
-    # cat cam_center
-    # cat_local_view = torch.cat([feat, ob_view, cam_center], dim=1)
-    cat_local_view = torch.cat([feat, ob_view, cam_center, ob_dist], dim=1)# all:32+63+63+21
-    cat_local_view_wodist = torch.cat([feat, ob_view], dim=1) # [N, c+3]   -->95
-    if pc.appearance_dim > 0:
-        camera_indicies = torch.ones_like(cat_local_view[:,0], dtype=torch.long, device=ob_dist.device) * viewpoint_camera.uid
-        # camera_indicies = torch.ones_like(cat_local_view[:,0], dtype=torch.long, device=ob_dist.device) * 10
-        appearance = pc.get_appearance(camera_indicies)
+    # ob_view = anchor - viewpoint_camera.camera_center
+    # ob_dist = ob_view.norm(dim=1, keepdim=True)#[N_an,1]
+    # ob_view = ob_view / ob_dist
+    # cat_local_view = torch.cat([feat, ob_view, cam_center, ob_dist], dim=1)
+    
+    ## decouple view_dir, feat
+    cat_local_view = feat 
 
     # get offset's opacity
-    if pc.add_opacity_dist:
-        neural_opacity = pc.get_opacity_mlp(cat_local_view) # [N, k]
-    else:
-        neural_opacity = pc.get_opacity_mlp(cat_local_view_wodist)
+    neural_opacity = pc.get_opacity_mlp(cat_local_view) # [N, k]
 
     # opacity mask generation
     neural_opacity = neural_opacity.reshape([-1, 1])
@@ -91,23 +47,11 @@ def generate_neural_gaussians(viewpoint_camera, pc : GaussianModel, visible_mask
     opacity = neural_opacity[mask]
 
     # get offset's color
-    if pc.appearance_dim > 0:
-        if pc.add_color_dist:
-            color = pc.get_color_mlp(torch.cat([cat_local_view, appearance], dim=1))
-        else:
-            color = pc.get_color_mlp(torch.cat([cat_local_view_wodist, appearance], dim=1))
-    else:
-        if pc.add_color_dist:
-            color = pc.get_color_mlp(cat_local_view)
-        else:
-            color = pc.get_color_mlp(cat_local_view_wodist)
+    color = pc.get_color_mlp(cat_local_view)
     color = color.reshape([anchor.shape[0]*pc.n_offsets, 3])# [mask]
 
     # get offset's cov
-    if pc.add_cov_dist:
-        scale_rot = pc.get_cov_mlp(cat_local_view)
-    else:
-        scale_rot = pc.get_cov_mlp(cat_local_view_wodist)
+    scale_rot = pc.get_cov_mlp(cat_local_view)
     scale_rot = scale_rot.reshape([anchor.shape[0]*pc.n_offsets, 7]) # [mask] #[N_an,70]->[N_gau,7]
     
     # offsets

@@ -44,6 +44,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     iter_end = torch.cuda.Event(enable_timing=True)
 
     viewpoint_stack = scene.getTrainCameras().copy()
+    # viewpoint_stack = viewpoint_stack[:split_idx] # far_only
     ema_loss_for_log = 0.0
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
@@ -170,7 +171,7 @@ if __name__ == "__main__":
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default=None)
-    parser.add_argument("--split_idx", type=int, default=10)  # far[:10], near[10:]
+    parser.add_argument("--split_idx", type=int, default=100)  # far[:10], near[10:]
     # parser.add_argument("--stage", type=str, default=None, help="uw_pretrain, uw2wide")
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)

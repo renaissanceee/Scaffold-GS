@@ -34,7 +34,7 @@ def readImages(renders_dir, gt_dir):
         image_names.append(fname)
     return renders, gts, image_names
 
-def evaluate(model_paths, scale):
+def evaluate(model_paths):
 
     full_dict = {}
     per_view_dict = {}
@@ -61,8 +61,8 @@ def evaluate(model_paths, scale):
                 per_view_dict_polytopeonly[scene_dir][method] = {}
 
                 method_dir = test_dir / method
-                gt_dir = method_dir / f"gt_{scale}"
-                renders_dir = method_dir / f"test_preds_{scale}"
+                gt_dir = method_dir / f"gt"
+                renders_dir = method_dir / f"renders"
                 renders, gts, image_names = readImages(renders_dir, gt_dir)
 
                 ssims = []
@@ -101,6 +101,5 @@ if __name__ == "__main__":
     # Set up command line argument parser
     parser = ArgumentParser(description="Training script parameters")
     parser.add_argument('--model_paths', '-m', required=True, nargs="+", type=str, default=[])
-    parser.add_argument('--resolution', '-r', type=int, default=-1)
     args = parser.parse_args()
-    evaluate(args.model_paths, args.resolution)
+    evaluate(args.model_paths)
