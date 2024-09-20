@@ -21,10 +21,10 @@ def generate_neural_gaussians(viewpoint_camera, pc : GaussianModel, visible_mask
     if visible_mask is None:
         visible_mask = torch.ones(pc.get_anchor.shape[0], dtype=torch.bool, device = pc.get_anchor.device)
     
-    feat = pc._anchor_feat[visible_mask]#[N_an,32]
-    anchor = pc.get_anchor[visible_mask]#[N_an,3]
-    grid_offsets = pc._offset[visible_mask]#[N_an,10,3]
-    grid_scaling = pc.get_scaling[visible_mask]#[N_an,6]
+    feat = pc._anchor_feat[visible_mask] 
+    anchor = pc.get_anchor[visible_mask] 
+    grid_offsets = pc._offset[visible_mask] 
+    grid_scaling = pc.get_scaling[visible_mask] 
 
     ## get view properties for anchor
     # ob_view = anchor - viewpoint_camera.camera_center
@@ -33,7 +33,13 @@ def generate_neural_gaussians(viewpoint_camera, pc : GaussianModel, visible_mask
     # cat_local_view = torch.cat([feat, ob_view, cam_center, ob_dist], dim=1)
     
     ## decouple view_dir, feat
-    cat_local_view = feat 
+    # cat_local_view = feat # 32
+    cat_local_view = torch.cat([feat, anchor], dim=1) # 32+3
+
+    # ----------------------------------
+    # shared layer
+    # cat_local_view = pc.get_head_mlp(cat_local_view)
+    # ----------------------------------
 
     # get offset's opacity
     neural_opacity = pc.get_opacity_mlp(cat_local_view) # [N, k]

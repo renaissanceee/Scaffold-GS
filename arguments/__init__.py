@@ -107,7 +107,11 @@ class OptimizationParams(ParamGroup):
         self.opacity_lr = 0.02
         self.scaling_lr = 0.007
         self.rotation_lr = 0.002
-        
+
+        self.mlp_head_lr_init = 0.008 # JJ
+        self.mlp_head_lr_final = 0.00005
+        self.mlp_head_lr_delay_mult = 0.01
+        self.mlp_head_lr_max_steps = 30_000
         
         self.mlp_opacity_lr_init = 0.002
         self.mlp_opacity_lr_final = 0.00002  
@@ -119,11 +123,6 @@ class OptimizationParams(ParamGroup):
         self.mlp_cov_lr_delay_mult = 0.01
         self.mlp_cov_lr_max_steps = 30_000
         
-        self.mlp_color_lr_init = 0.008
-        self.mlp_color_lr_final = 0.00005
-        self.mlp_color_lr_delay_mult = 0.01
-        self.mlp_color_lr_max_steps = 30_000
-
         self.mlp_color_lr_init = 0.008
         self.mlp_color_lr_final = 0.00005
         self.mlp_color_lr_delay_mult = 0.01

@@ -102,7 +102,9 @@ class GaussianModel:
                 nn.Linear(feat_dim, 3),
                 nn.Softmax(dim=1)
             ).cuda()
+        self.enc_dim = 3 # 0 # anchor:3
 
+        "default: fea + view_dir + dist"
         # self.opacity_dist_dim = 1 if self.add_opacity_dist else 0
         # self.mlp_opacity = nn.Sequential(
         #     nn.Linear(feat_dim+3+self.opacity_dist_dim, feat_dim),
@@ -125,27 +127,101 @@ class GaussianModel:
         #     nn.Linear(feat_dim, 3*self.n_offsets),
         #     nn.Sigmoid()
         # ).cuda()
-         ## decouple: no view_dir input MLP
+        "decouple_1: fea"
+        ## decouple: no view_dir input MLP
+        # self.mlp_opacity = nn.Sequential(
+        #     nn.Linear(feat_dim, feat_dim),
+        #     nn.ReLU(True),
+        #     nn.Linear(feat_dim, n_offsets),
+        #     nn.Tanh()
+        # ).cuda()
+        # self.mlp_cov = nn.Sequential(
+        #     nn.Linear(feat_dim, feat_dim),
+        #     nn.ReLU(True),
+        #     nn.Linear(feat_dim, 7*self.n_offsets),
+        # ).cuda()
+        # self.mlp_color = nn.Sequential(
+        #     nn.Linear(feat_dim, feat_dim),
+        #     nn.ReLU(True),
+        #     nn.Linear(feat_dim, 3*self.n_offsets),
+        #     nn.Sigmoid()
+        # ).cuda()
+        "decouple_2: fea, 6-layer-MLP()"
+        ## decouple: no view_dir input MLP  --> from 2 to 6 layer
+        # self.mlp_head = nn.Sequential(
+        #     nn.Linear(feat_dim, feat_dim),
+        #     nn.LeakyReLU(0.01),
+        #     nn.Linear(feat_dim, feat_dim),
+        #     nn.LeakyReLU(0.01),
+        #     nn.Linear(feat_dim, feat_dim),
+        #     nn.LeakyReLU(0.01),
+        # ).cuda()
+        # self.mlp_opacity = nn.Sequential(
+        #     nn.Linear(feat_dim, feat_dim),
+        #     nn.LeakyReLU(0.01),
+        #     nn.Linear(feat_dim, feat_dim),
+        #     nn.LeakyReLU(0.01),
+        #     nn.Linear(feat_dim, n_offsets),
+        #     nn.Tanh()
+        # ).cuda()
+        # self.mlp_cov = nn.Sequential(
+        #     nn.Linear(feat_dim, feat_dim),
+        #     nn.LeakyReLU(0.01),
+        #     nn.Linear(feat_dim, feat_dim),
+        #     nn.LeakyReLU(0.01),
+        #     nn.Linear(feat_dim, 7*self.n_offsets),
+        # ).cuda()
+        # self.mlp_color = nn.Sequential(
+        #     nn.Linear(feat_dim, feat_dim),
+        #     nn.LeakyReLU(0.01),
+        #     nn.Linear(feat_dim, feat_dim),
+        #     nn.LeakyReLU(0.01),
+        #     nn.Linear(feat_dim, 3*self.n_offsets),
+        #     nn.Sigmoid()
+        # ).cuda()
+
+        "decouple_3: layer0 shared"
+        # self.mlp_head = nn.Sequential(
+        #     nn.Linear(feat_dim+self.enc_dim, feat_dim), # first-layer: shared
+        #     nn.ReLU(True),
+        # ).cuda()
+        # self.mlp_opacity = nn.Sequential(
+        #     nn.Linear(feat_dim, n_offsets),
+        #     nn.Tanh()
+        # ).cuda()
+        # self.mlp_cov = nn.Sequential(
+        #     nn.Linear(feat_dim, 7*self.n_offsets),
+        # ).cuda()
+        # self.mlp_color = nn.Sequential(
+        #     nn.Linear(feat_dim, 3*self.n_offsets),
+        #     nn.Sigmoid()
+        # ).cuda()
+
+        "decouple_4: fea + anchor"
+        self.mlp_head = nn.Sequential(
+            nn.Linear(feat_dim+3, feat_dim), # no-use
+            nn.ReLU(True),
+        ).cuda()
         self.mlp_opacity = nn.Sequential(
-            nn.Linear(feat_dim, feat_dim),
+            nn.Linear(feat_dim+3, feat_dim), # 3: self._anchor
             nn.ReLU(True),
             nn.Linear(feat_dim, n_offsets),
             nn.Tanh()
         ).cuda()
         self.mlp_cov = nn.Sequential(
-            nn.Linear(feat_dim, feat_dim),
+            nn.Linear(feat_dim+3, feat_dim),
             nn.ReLU(True),
             nn.Linear(feat_dim, 7*self.n_offsets),
         ).cuda()
         self.mlp_color = nn.Sequential(
-            nn.Linear(feat_dim, feat_dim),
+            nn.Linear(feat_dim+3, feat_dim),
             nn.ReLU(True),
             nn.Linear(feat_dim, 3*self.n_offsets),
             nn.Sigmoid()
         ).cuda()
 
-
     def eval(self):
+        self.mlp_head.eval()
         self.mlp_opacity.eval()
         self.mlp_cov.eval()
         self.mlp_color.eval()
@@ -155,6 +231,7 @@ class GaussianModel:
             self.mlp_feature_bank.eval()
 
     def train(self):
+        self.mlp_head.eval()
         self.mlp_opacity.train()
         self.mlp_cov.train()
         self.mlp_color.train()
@@ -209,7 +286,11 @@ class GaussianModel:
     @property
     def get_featurebank_mlp(self):
         return self.mlp_feature_bank
-    
+
+    @property
+    def get_head_mlp(self):
+        return self.mlp_head
+
     @property
     def get_opacity_mlp(self):
         return self.mlp_opacity
@@ -339,6 +420,7 @@ class GaussianModel:
                 {'params': [self._scaling], 'lr': training_args.scaling_lr, "name": "scaling"},
                 {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"},
 
+                {'params': self.mlp_head.parameters(), 'lr': training_args.mlp_head_lr_init,"name": "mlp_head"},
                 {'params': self.mlp_opacity.parameters(), 'lr': training_args.mlp_opacity_lr_init, "name": "mlp_opacity"},
                 {'params': self.mlp_cov.parameters(), 'lr': training_args.mlp_cov_lr_init, "name": "mlp_cov"},
                 {'params': self.mlp_color.parameters(), 'lr': training_args.mlp_color_lr_init, "name": "mlp_color"},
@@ -353,7 +435,10 @@ class GaussianModel:
                                                     lr_final=training_args.offset_lr_final*self.spatial_lr_scale,
                                                     lr_delay_mult=training_args.offset_lr_delay_mult,
                                                     max_steps=training_args.offset_lr_max_steps)
-        
+        self.mlp_head_scheduler_args = get_expon_lr_func(lr_init=training_args.mlp_head_lr_init,
+                                                    lr_final=training_args.mlp_head_lr_final,
+                                                    lr_delay_mult=training_args.mlp_head_lr_delay_mult,
+                                                    max_steps=training_args.mlp_head_lr_max_steps)
         self.mlp_opacity_scheduler_args = get_expon_lr_func(lr_init=training_args.mlp_opacity_lr_init,
                                                     lr_final=training_args.mlp_opacity_lr_final,
                                                     lr_delay_mult=training_args.mlp_opacity_lr_delay_mult,
@@ -387,6 +472,9 @@ class GaussianModel:
                 param_group['lr'] = lr
             if param_group["name"] == "anchor":
                 lr = self.anchor_scheduler_args(iteration)
+                param_group['lr'] = lr
+            if param_group["name"] == "mlp_head":
+                lr = self.mlp_head_scheduler_args(iteration)
                 param_group['lr'] = lr
             if param_group["name"] == "mlp_opacity":
                 lr = self.mlp_opacity_scheduler_args(iteration)
@@ -769,7 +857,12 @@ class GaussianModel:
             # color_mlp = torch.jit.trace(self.mlp_color, (torch.rand(1, self.feat_dim+3+self.color_dist_dim+self.appearance_dim).cuda()))
             # color_mlp.save(os.path.join(path, 'color_mlp.pt'))
             # self.mlp_color.train()
-            
+
+            self.mlp_head.eval()
+            head_mlp = torch.jit.trace(self.mlp_head, (torch.rand(1, self.feat_dim+self.enc_dim).cuda()))
+            head_mlp.save(os.path.join(path, 'head_mlp.pt'))
+            self.mlp_head.train()
+
             self.mlp_opacity.eval()
             opacity_mlp = torch.jit.trace(self.mlp_opacity, (torch.rand(1, self.feat_dim).cuda()))
             opacity_mlp.save(os.path.join(path, 'opacity_mlp.pt'))
@@ -825,6 +918,7 @@ class GaussianModel:
 
     def load_mlp_checkpoints(self, path, mode = 'split'):#split or unite
         if mode == 'split':
+            self.mlp_head = torch.jit.load(os.path.join(path, 'head_mlp.pt')).cuda()
             self.mlp_opacity = torch.jit.load(os.path.join(path, 'opacity_mlp.pt')).cuda()
             self.mlp_cov = torch.jit.load(os.path.join(path, 'cov_mlp.pt')).cuda()
             self.mlp_color = torch.jit.load(os.path.join(path, 'color_mlp.pt')).cuda()
